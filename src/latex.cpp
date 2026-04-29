@@ -113,6 +113,22 @@ void LaTeX::init(string res_root_path) {
   _builder = new TeXRenderBuilder();
 }
 
+void LaTeX::initBundled() {
+  // PROBE PATCH: bypass queryResourceLocation entirely. RES_BASE keeps its
+  // default "res", and Font_qt(file, size) in platform/qt/graphic_qt.cpp
+  // prepends ":/" when the file is missing on disk -- so font references
+  // resolve to ":/res/fonts/..." and can be served from a bundled .qrc.
+  if (_formula != nullptr) return;
+
+  NewCommandMacro::_init_();
+  DefaultTeXFont::_init_();
+  Formula::_init_();
+  TextRenderingBox::_init_();
+
+  _formula = new Formula();
+  _builder = new TeXRenderBuilder();
+}
+
 void LaTeX::release() {
   DefaultTeXFont::_free_();
   Formula::_free_();

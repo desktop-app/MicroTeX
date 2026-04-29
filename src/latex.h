@@ -31,6 +31,17 @@ public:
   static void init(std::string res_root_path = "res");
 
   /**
+   * Initialize TeX context without any filesystem-based resource lookup.
+   * Use when resources are bundled into a virtual filesystem the standard
+   * std::filesystem APIs cannot reach (e.g. Qt resources). The Qt backend
+   * already falls back to ":/<path>" inside Font_qt(file, size) for any
+   * file not present on disk -- with the default RES_BASE = "res", font
+   * paths resolve to ":/res/fonts/...", which a bundled .qrc registered
+   * at prefix /res can satisfy.
+   */
+  static void initBundled();
+
+  /**
    * Get the root path of the "TeX resources"
    */
   static const std::string& getResRootPath();
