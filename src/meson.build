@@ -52,7 +52,7 @@ else
 	add_project_arguments('-std=c++14', language : 'cpp')
 endif
 
-deps += [dependency('tinyxml2')]
+# tinyxml2 dependency removed along with src/res/parser (see CMakeLists.txt).
 
 clatexmath_lib = library('clatexmath', src,
 	include_directories: inc,

@@ -5,7 +5,7 @@
 #include "core/parser.h"
 #include "fonts/alphabet.h"
 #include "fonts/fonts.h"
-#include "res/parser/formula_parser.h"
+// PROBE PATCH: tinyxml2-backed loaders removed.
 
 using namespace std;
 using namespace tex;
@@ -170,9 +170,11 @@ FontInfos* Formula::getExternalFont(const UnicodeBlock& block) {
 }
 
 void Formula::addSymbolMappings(const string& file) {
-  TeXFormulaSettingParser parser(file);
-  parser.parseSymbol(_symbolMappings, _symbolTextMappings);
-  parser.parseSymbol2Formula(_symbolFormulaMappings, _symbolTextMappings);
+  // PROBE PATCH: TeXFormulaSettingParser (tinyxml2-backed) removed. The
+  // built-in symbol/formula tables registered at startup are authoritative.
+  throw ex_invalid_state(
+    "Formula::addSymbolMappings(file) is disabled in this MicroTeX build "
+    "(XML resource loaders removed): " + file);
 }
 
 void Formula::_free_() {

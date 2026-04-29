@@ -1,13 +1,11 @@
 subdir('builtin')
 subdir('font')
-subdir('parser')
 subdir('reg')
 subdir('sym')
 
 res_src = []
 res_src += builtin_src
 res_src += font_src
-res_src += parser_src
 res_src += reg_src
 res_src += sym_src
 

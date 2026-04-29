@@ -47,14 +47,11 @@ endif ()
 # copy res dir
 
 file(COPY res DESTINATION .)
-if (MSVC)
-    find_package(tinyxml2 CONFIG REQUIRED)
-    target_link_libraries(LaTeX PRIVATE tinyxml2::tinyxml2)
-else ()
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(tinyxml2 REQUIRED IMPORTED_TARGET tinyxml2)
-    target_link_libraries(LaTeX PRIVATE tinyxml2)
-endif ()
+
+# tinyxml2 dependency removed: src/res/parser/{font,formula}_parser.cpp
+# (the only XML loaders) are gone; non-Latin alphabets fall through to the
+# default font handler, matching the prior behaviour when the alphabet XMLs
+# were missing on disk.
 
 # source files
 target_sources(LaTeX PRIVATE
@@ -131,8 +128,6 @@ target_sources(LaTeX PRIVATE
         src/res/font/ss10.def.cpp
         src/res/font/stmary10.def.cpp
         src/res/font/tt10.def.cpp
-        src/res/parser/font_parser.cpp
-        src/res/parser/formula_parser.cpp
         src/res/reg/builtin_font_reg.cpp
         src/res/reg/builtin_syms_reg.cpp
         src/res/sym/amsfonts.def.cpp

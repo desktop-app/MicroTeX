@@ -6,7 +6,8 @@
 #include "fonts/symbol_reg.h"
 #include "graphic/graphic.h"
 #include "render.h"
-#include "res/parser/font_parser.h"
+// PROBE PATCH: tinyxml2-backed font/symbol parser removed; only the
+// compiled-in font tables (cmr10.def.cpp et al.) drive metrics now.
 
 using namespace std;
 using namespace tex;
@@ -61,12 +62,15 @@ void DefaultTeXFont::__push_symbols(const __symbol_component* symbols, const int
 
 void DefaultTeXFont::addTeXFontDescription(
   const string& base, const string& file) {
-  DefaultTeXFontParser parser(base, file);
-  parser.parseFontDescriptions();
-  parser.parseExtraPath();
-  const auto x = parser.parseTextStyleMappings();
-  _textStyleMappings.insert(x.begin(), x.end());
-  parser.parseSymbolMappings(_symbolMappings);
+  // PROBE PATCH: tinyxml2-backed parser removed. Cyrillic/Greek alphabet
+  // packages, which were the only callers of this path, are no longer
+  // loadable at runtime. The exception thrown here is silently caught in
+  // addAlphabet(reg)'s catch(ex_alphabet_registration), so non-Latin
+  // characters fall through to the default font handler -- matching the
+  // pre-strip behaviour when the XML files were missing on disk.
+  throw ex_alphabet_registration(
+    "External font description loading is disabled in this build: "
+    + base + "/" + file);
 }
 
 void DefaultTeXFont::addAlphabet(
@@ -249,7 +253,7 @@ sptr<CharFont> DefaultTeXFont::getLigature(const CharFont& left, const CharFont&
 }
 
 int DefaultTeXFont::getMuFontId() {
-  return _generalSettings[DefaultTeXFontParser::MUFONTID_ATTR];
+  return _generalSettings["mufontid"];
 }
 
 Char DefaultTeXFont::getNextLarger(const Char& c, TexStyle style) {
@@ -260,7 +264,7 @@ Char DefaultTeXFont::getNextLarger(const Char& c, TexStyle style) {
 }
 
 float DefaultTeXFont::getSpace(TexStyle style) {
-  int spaceFontId = _generalSettings[DefaultTeXFontParser::SPACEFONTID_ATTR];
+  int spaceFontId = _generalSettings["spacefontid"];
   auto info = getInfo(spaceFontId);
   return info->getSpace(getSizeFactor(style) * Formula::PIXELS_PER_POINT);
 }

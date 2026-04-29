@@ -8,7 +8,8 @@
 #include "core/formula.h"
 #include "fonts/fonts.h"
 #include "graphic/graphic.h"
-#include "res/parser/formula_parser.h"
+// PROBE PATCH: tinyxml2-backed XML loaders are unused for static-resource
+// builds. Constants previously pulled from formula_parser.h are inlined.
 
 using namespace std;
 using namespace tex;
@@ -284,8 +285,8 @@ AccentedAtom::AccentedAtom(const sptr<Atom>& base, const string& name) {
     throw ex_invalid_symbol_type(
       "The symbol with the name '"
       + name + "' is not defined as an accent ("
-      + TeXSymbolParser::TYPE_ATTR + "='acc') in '"
-      + TeXSymbolParser::RESOURCE_NAME + "'!"
+      + std::string("type") + "='acc') in '"
+      + std::string("TeXSymbols") + "'!"
     );
   }
   _changeSize = true;
@@ -306,8 +307,8 @@ AccentedAtom::AccentedAtom(const sptr<Atom>& base, const sptr<Formula>& acc) {
     throw ex_invalid_symbol_type(
       "The accent Formula represents a single symbol with the name '"
       + _accent->getName() + "', but this symbol is not defined as accent ("
-      + TeXSymbolParser::TYPE_ATTR + "='acc') in '"
-      + TeXSymbolParser::RESOURCE_NAME + "'!"
+      + std::string("type") + "='acc') in '"
+      + std::string("TeXSymbols") + "'!"
     );
   }
 }

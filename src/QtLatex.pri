@@ -64,16 +64,13 @@ SOURCES += \
     latex/res/font/ss10.def.cpp \
     latex/res/font/stmary10.def.cpp \
     latex/res/font/tt10.def.cpp \
-    latex/res/parser/font_parser.cpp \
-    latex/res/parser/formula_parser.cpp \
     latex/res/reg/builtin_font_reg.cpp \
     latex/res/reg/builtin_syms_reg.cpp \
     latex/res/sym/amsfonts.def.cpp \
     latex/res/sym/amssymb.def.cpp \
     latex/res/sym/base.def.cpp \
     latex/res/sym/stmaryrd.def.cpp \
-    latex/res/sym/symspecial.def.cpp \
-    latex/xml/tinyxml2.cpp
+    latex/res/sym/symspecial.def.cpp
 
 HEADERS += \
     latex/samples/qt_texqmlitem.h \
@@ -102,8 +99,6 @@ HEADERS += \
     latex/platform/qt/graphic_qt.h \
     latex/render.h \
     latex/res/font_def.res.h \
-    latex/res/parser/font_parser.h \
-    latex/res/parser/formula_parser.h \
     latex/res/reg/builtin_font_reg.h \
     latex/res/reg/builtin_syms_reg.h \
     latex/res/symbol_def.res.h \
@@ -113,7 +108,6 @@ HEADERS += \
     latex/utils/log.h \
     latex/utils/nums.h \
     latex/utils/string_utils.h \
-    latex/utils/utf.h \
-    latex/xml/tinyxml2.h
+    latex/utils/utf.h
 
 RESOURCES += latex.qrc

@@ -1,6 +1,6 @@
 #include "atom/atom_char.h"
 #include "core/core.h"
-#include "res/parser/formula_parser.h"
+// PROBE PATCH: tinyxml2-backed loader removed; addSymbolAtom(file) is now a stub.
 
 using namespace tex;
 using namespace std;
@@ -56,8 +56,13 @@ sptr<Box> SymbolAtom::createBox(Environment& env) {
 //}
 
 void SymbolAtom::addSymbolAtom(const string& file) {
-  TeXSymbolParser parser(file);
-  parser.readSymbols(_symbols);
+  // PROBE PATCH: XML symbol loading removed. The static-resource build
+  // relies entirely on the symbol tables registered at startup
+  // (DefaultTeXFont::__register_symbols_set, etc.). Calling this would
+  // only succeed if the caller had a tinyxml2 build, which we've stripped.
+  throw ex_invalid_state(
+    "SymbolAtom::addSymbolAtom(file) is disabled in this MicroTeX build "
+    "(XML resource loaders removed): " + file);
 }
 
 void SymbolAtom::addSymbolAtom(const sptr<SymbolAtom>& sym) {
