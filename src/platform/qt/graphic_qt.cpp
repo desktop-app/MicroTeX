@@ -44,7 +44,10 @@ Font_qt::Font_qt(const string& family, int style, float size) {
 //  qInfo() << "new font" << QString::fromStdString(family) << style << size;
 
   _font.setFamily(QString::fromStdString(family));
-  _font.setPointSizeF(size);
+  // PROBE PATCH: MicroTeX's layout treats `size' as pixels; setPointSizeF
+  // would re-scale by the platform DPI (e.g. 1.33x on Windows 96 DPI),
+  // making glyphs overflow their reserved cells. Use pixelSize instead.
+  _font.setPixelSize(qMax(1, int(qRound(size))));
 
   _font.setBold(style & BOLD);
   _font.setItalic(style & ITALIC);
@@ -55,7 +58,8 @@ Font_qt::Font_qt(const string& file, float size)
 //  qInfo() << "new font" << QString::fromStdString(file) << size;
 
   // set size for newly loaded and previously loaded font
-  _font.setPointSizeF(size);
+  // PROBE PATCH: see Font_qt(family, style, size) above.
+  _font.setPixelSize(qMax(1, int(qRound(size))));
 
   QString filename(QString::fromStdString(file));
   if(!QFile::exists(filename)) {

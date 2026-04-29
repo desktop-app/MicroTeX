@@ -422,8 +422,14 @@ inline sptr<Atom> _math_type(TeXParser& tp, Args& args, AtomType type) {
 }
 
 inline macro(mathop) {
+  // PROBE PATCH: upstream forces noLimits, which kills the standard
+  // "limits below in displaystyle" behaviour for \lim/\limsup/\liminf/etc.
+  // (defined in formula_def.cpp via plain \mathop{}). LimitsType::normal
+  // lets atom_basic.cpp:459 pick limits-below in display, limits-beside
+  // in inline -- functions wrapped as \mathop{}\nolimits (sin, cos, log...)
+  // still get the explicit \nolimits applied afterwards.
   auto a = _math_type(tp, args, AtomType::bigOperator);
-  a->_limitsType = LimitsType::noLimits;
+  a->_limitsType = LimitsType::normal;
   return a;
 }
 
