@@ -4,7 +4,7 @@
 #include "core/formula.h"
 #include "core/macro.h"
 #include "fonts/fonts.h"
-#if CLATEX_CXX17
+#if CLATEX_CXX17 && !defined(__APPLE__)
 #include <filesystem>
 #endif
 
@@ -64,7 +64,7 @@ string LaTeX::queryResourceLocation(string& custom_path) {
   // goes through the list of potential paths. if it finds a path that contains
   // .clatexmath-res_root, it returns it. Otherwise return an empty string.
   while (!paths.empty()) {
-#if CLATEX_CXX17
+#if CLATEX_CXX17 && !defined(__APPLE__)
     filesystem::path p = paths.front();
     p.append(CHECK_FILE);
     if (filesystem::exists(p)) {

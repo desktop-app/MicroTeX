@@ -1,4 +1,4 @@
-#include "config.h"
+#include "../../config.h"
 
 #if defined(BUILD_QT) && !defined(MEM_CHECK)
 

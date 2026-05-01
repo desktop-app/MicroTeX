@@ -3,7 +3,7 @@
 
 #include <cstdio>
 
-#include "config.h"
+#include "../config.h"
 
 #define ANSI_BOLD        "\x1b[1m"
 #define ANSI_COLOR_CYAN  "\x1b[36m"
