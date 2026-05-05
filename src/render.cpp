@@ -4,8 +4,18 @@
 #include "core/core.h"
 #include "core/formula.h"
 
+#include <cmath>
+
 using namespace std;
 using namespace tex;
+
+namespace {
+
+int rasterBound(float value) {
+  return static_cast<int>(std::ceil(value));
+}
+
+}
 
 const color TeXRender::_defaultcolor = black;
 float TeXRender::_defaultSize = -1;
@@ -75,26 +85,20 @@ float TeXRender::getTextSize() const {
 }
 
 int TeXRender::getHeight() const {
-  return (int) (
-    _box->_height * _textSize +
-    _box->_depth * _textSize +
-    _insets.top + _insets.bottom
-  );
+  return rasterBound(_box->_height * _textSize + _insets.top) + getDepth();
 }
 
 int TeXRender::getDepth() const {
-  return (int) (_box->_depth * _textSize + _insets.bottom);
+  return rasterBound(_box->_depth * _textSize + _insets.bottom) + 1;
 }
 
 int TeXRender::getWidth() const {
-  return (int) (_box->_width * _textSize + _insets.left + _insets.right);
+  return rasterBound(_box->_width * _textSize + _insets.left + _insets.right) + 1;
 }
 
 float TeXRender::getBaseline() const {
-  return (
-    (_box->_height * _textSize + _insets.top) /
-    ((_box->_height + _box->_depth) * _textSize + _insets.top + _insets.bottom)
-  );
+  const auto height = getHeight();
+  return height ? float(height - getDepth()) / float(height) : 0.f;
 }
 
 void TeXRender::setTextSize(float textSize) {
