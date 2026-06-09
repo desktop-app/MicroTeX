@@ -111,7 +111,8 @@ QFont Font_qt::getQFont() const {
 }
 
 float Font_qt::getSize() const {
-  return _font.pointSizeF();
+  const auto pixelSize = _font.pixelSize();
+  return (pixelSize > 0) ? pixelSize : _font.pointSizeF();
 }
 
 sptr<Font> Font_qt::deriveFont(int style) const {
