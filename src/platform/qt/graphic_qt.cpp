@@ -12,10 +12,12 @@
 #include <QColor>
 #include <QFont>
 #include <QFontDatabase>
+#include <QFontInfo>
 #include <QPainter>
 #include <QPen>
 #include <QPointF>
 #include <QRectF>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QTransform>
@@ -26,6 +28,26 @@ using namespace tex;
 using namespace std;
 
 QMap<QString, QString> Font_qt::_loaded_families;
+
+namespace {
+
+// The system font database resolves families by name, so a system font
+// sharing a family name with our bundled ones (texlive installs cmmi10
+// etc.) used to shadow them and glyphs silently vanished. The bundled
+// families are prefixed now, but keep loud diagnostics for the log.
+void warnIfResolvedDifferently(const QFont& font, const QString& family) {
+  static QSet<QString> checked;
+  if (family.isEmpty() || checked.contains(family)) return;
+  checked.insert(family);
+  const QFontInfo info(font);
+  if (info.family().compare(family, Qt::CaseInsensitive) != 0) {
+    qWarning()
+      << "MicroTeX: font family" << family
+      << "resolved to" << info.family();
+  }
+}
+
+} // namespace
 
 namespace tex {
 // Some wstrings arrive with a \0 at end, so we remove when converting
@@ -51,6 +73,8 @@ Font_qt::Font_qt(const string& family, int style, float size) {
 
   _font.setBold(style & BOLD);
   _font.setItalic(style & ITALIC);
+
+  warnIfResolvedDifferently(_font, QString::fromStdString(family));
 }
 
 Font_qt::Font_qt(const string& file, float size)
@@ -79,18 +103,15 @@ Font_qt::Font_qt(const string& file, float size)
   QFontDatabase db;
   int id = db.addApplicationFont(filename);
   if( id == -1 ) {
-#ifdef HAVE_LOG
-    __log << file << " failed to load\n";
-#endif
+    qWarning() << "MicroTeX: failed to load font file" << filename;
   } else {
     QStringList families = db.applicationFontFamilies(id);
     if( families.size() > 0 ) {
       _loaded_families[filename] = families.first();
       _font.setFamily(families.first());
+      warnIfResolvedDifferently(_font, families.first());
     } else {
-#ifdef HAVE_LOG
-    __log << file << " no font families found\n";
-#endif
+      qWarning() << "MicroTeX: no font families in" << filename;
     }
   }
 }
