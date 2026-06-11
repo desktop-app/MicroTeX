@@ -62,7 +62,12 @@ Formula::Formula(const TeXParser& tp, const wstring& latex, bool preprocess)
   if (tp.isPartial()) {
     try {
       _parser.parse();
-    } catch (exception& e) {}
+    } catch (exception& e) {
+      // Same fallback as the sibling constructors: callers use _root
+      // unchecked (e.g. StyleAtom from \displaystyle), so a swallowed
+      // parse failure must not leave it null.
+      if (_root == nullptr) _root = sptrOf<EmptyAtom>();
+    }
   } else {
     _parser.parse();
   }

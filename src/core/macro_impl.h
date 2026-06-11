@@ -594,7 +594,9 @@ inline macro(alignatATATenv) {
   arr->checkDimensions();
   size_t n = 0;
   valueof(args[1], n);
-  if (arr->cols() != 2 * n) throw ex_parse("Bad number of equations in alignat environment!");
+  // Rows may use fewer column pairs than declared (LaTeX allows that),
+  // the layout only depends on the columns actually present.
+  if (arr->cols() > 2 * n) throw ex_parse("Bad number of equations in alignat environment!");
 
   return sptrOf<MatrixAtom>(tp.isPartial(), sptr<ArrayFormula>(arr), MatrixType::alignAt);
 }
@@ -614,7 +616,9 @@ inline macro(alignedatATATenv) {
   arr->checkDimensions();
   size_t n = 0;
   valueof(args[1], n);
-  if (arr->cols() != 2 * n) {
+  // Rows may use fewer column pairs than declared (LaTeX allows that),
+  // the layout only depends on the columns actually present.
+  if (arr->cols() > 2 * n) {
     throw ex_parse("Bad number of equations in alignedat environment!");
   }
 
