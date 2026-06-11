@@ -87,6 +87,14 @@ public:
 
   QPainter* getQPainter() const;
 
+  // Fills glyph outlines directly, bypassing the platform glyph
+  // rasterization (see the comment in the implementation).
+  void drawTextAsPath(
+    const QFont& font,
+    const QString& text,
+    float x,
+    float y);
+
   virtual void setColor(color c) override;
 
   virtual color getColor() const override;

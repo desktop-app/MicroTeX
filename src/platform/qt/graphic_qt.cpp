@@ -14,6 +14,7 @@
 #include <QFontDatabase>
 #include <QFontInfo>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPen>
 #include <QPointF>
 #include <QRectF>
@@ -194,8 +195,7 @@ void TextLayout_qt::getBounds(Rect& r) {
 
 void TextLayout_qt::draw(Graphics2D& g2, float x, float y) {
   Graphics2D_qt& g = static_cast<Graphics2D_qt&>(g2);
-  g.getQPainter()->setFont(_font);
-  g.getQPainter()->drawText(QPointF(x, y), _text);
+  g.drawTextAsPath(_font, _text, x, y);
 }
 
 sptr<TextLayout> TextLayout::create(const std::wstring& src, const sptr<Font>& font) {
@@ -336,15 +336,28 @@ void Graphics2D_qt::drawChar(wchar_t c, float x, float y) {
 }
 
 void Graphics2D_qt::drawText(const std::wstring& t, float x, float y) {
+  drawTextAsPath(_font->getQFont(), wstring_to_QString(t), x, y);
+}
 
-  _painter->setFont(_font->getQFont());
-
-  QString text = wstring_to_QString(t);
-  //qInfo() << "text" << x << y << text << text.toLocal8Bit();
-  //for(size_t i=0; i<t.size(); ++i)
-  //  qInfo() << 'v' << int(t[i]);
-
-  _painter->drawText(QPointF(x, y), text);
+void Graphics2D_qt::drawTextAsPath(
+    const QFont& font,
+    const QString& text,
+    float x,
+    float y) {
+  // Draw glyphs as filled outlines instead of QPainter::drawText: the
+  // glyph-image path goes through FT_Render_Glyph, which fails with
+  // FT_Err_Raster_Overflow (0x62) at our huge supersampled pixel sizes
+  // under some systems' fontconfig render settings (e.g. antialiasing
+  // disabled forces the legacy monochrome rasterizer). Path filling only
+  // extracts outlines, so the system rasterization config can't break it.
+  QPainterPath path;
+  path.setFillRule(Qt::WindingFill);
+  path.addText(QPointF(x, y), font, text);
+  _painter->save();
+  _painter->setRenderHint(QPainter::Antialiasing, true);
+  _painter->setPen(Qt::NoPen);
+  _painter->fillPath(path, getQBrush());
+  _painter->restore();
 }
 
 void Graphics2D_qt::drawLine(float x1, float y1, float x2, float y2) {
