@@ -411,5 +411,13 @@ void NewCommandMacro::_init_() {
   cmd(0, L"L", L"\\mathrm{\\polishlcross L}");
   cmd(0, L"l", L"\\mathrm{\\polishlcross l}");
   cmd(0, L"Join", L"\\mathop{\\rlap{\\ltimes}\\rtimes}");
+  // Plain-TeX command forms of the matrix environments (\matrix{a & b \\ c
+  // & d} etc.). LaTeX proper dropped them, but MathJax keeps them as a
+  // compatibility extension and users expect them to work. Inflated during
+  // the preprocess pass, so the & and \\ inside the balanced group are
+  // grabbed verbatim before parsing.
+  cmd(1, L"matrix", L"\\begin{matrix}#1\\end{matrix}");
+  cmd(1, L"pmatrix", L"\\begin{pmatrix}#1\\end{pmatrix}");
+  cmd(1, L"cases", L"\\begin{cases}#1\\end{cases}");
   // endregion
 }
