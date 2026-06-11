@@ -602,7 +602,16 @@ sptr<Atom> TeXParser::getArgument() {
     _formula = &tf;
     _pos++;
     _group++;
-    parse();
+    try {
+      parse();
+    } catch (...) {
+      // Restore before unwinding: leaving _formula pointing at the dead
+      // stack temporary poisons every later parse made with this parser
+      // (the shared LaTeX::_formula one lives forever), turning the next
+      // tp._formula dereference into a use-after-free.
+      _formula = tmp;
+      throw;
+    }
     _formula = tmp;
     if (_formula->_root == nullptr) {
       auto* rm = new RowAtom();
