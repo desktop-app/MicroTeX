@@ -543,6 +543,8 @@ inline macro(matrixATATenv) {
 }
 
 inline macro(multicolumn) {
+  if (!tp.isArrayMode())
+    throw ex_parse("Command 'multicolumn' only available in array mode!");
   int n = 0;
   valueof(args[1], n);
   const std::string x = wide2utf8(args[2]);

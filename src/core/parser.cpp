@@ -139,7 +139,12 @@ void TeXParser::addAtom(const sptr<Atom>& atom) const {
 
 void TeXParser::addRow() const {
   if (!_arrayMode) throw ex_parse("Can not add row in none-array mode!");
-  ((ArrayFormula*) _formula)->addRow();
+  // _formula may temporarily point at a plain Formula (e.g. a brace-group
+  // argument in getArgument), a C-style downcast would read past the end
+  // of the object.
+  auto* arr = dynamic_cast<ArrayFormula*>(_formula);
+  if (arr == nullptr) throw ex_parse("Can not add row in none-array mode!");
+  arr->addRow();
 }
 
 wstring TeXParser::getDollarGroup(wchar_t openclose) {
@@ -600,6 +605,13 @@ sptr<Atom> TeXParser::getArgument() {
     Formula tf;
     Formula* tmp = _formula;
     _formula = &tf;
+    // The group is parsed into a plain Formula, so row commands (\\, \cr)
+    // inside it must not see the enclosing array mode: addRow would
+    // downcast the temporary to ArrayFormula (e.g. \\int^{\\infty}, where
+    // the first \\ wraps the rest in an ArrayFormula and the second is
+    // parsed inside the superscript group).
+    const bool arrayMode = _arrayMode;
+    _arrayMode = false;
     _pos++;
     _group++;
     try {
@@ -610,9 +622,11 @@ sptr<Atom> TeXParser::getArgument() {
       // (the shared LaTeX::_formula one lives forever), turning the next
       // tp._formula dereference into a use-after-free.
       _formula = tmp;
+      _arrayMode = arrayMode;
       throw;
     }
     _formula = tmp;
+    _arrayMode = arrayMode;
     if (_formula->_root == nullptr) {
       auto* rm = new RowAtom();
       rm->add(tf._root);
