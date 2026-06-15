@@ -5,6 +5,7 @@
 #include "common.h"
 
 #include <map>
+#include <set>
 #include <string>
 
 namespace tex {
@@ -23,6 +24,16 @@ protected:
   static std::map<std::wstring, std::wstring> _codes;
   static std::map<std::wstring, std::wstring> _replacements;
   static Macro* _instance;
+
+  // Snapshot of the built-in macro state, taken right after _init_ via
+  // _captureBuiltins(). User formulas may be untrusted, so _reset() rolls
+  // _codes/_replacements/_commands back to this snapshot before each render,
+  // and checkNew/checkRenew refuse to redefine any built-in -- otherwise a
+  // single message could redefine \frac (or any command) for every later
+  // formula in the session.
+  static std::map<std::wstring, std::wstring> _baselineCodes;
+  static std::map<std::wstring, std::wstring> _baselineReplacements;
+  static std::set<std::wstring> _builtinCommands;
 
   static void checkNew(const std::wstring& name);
 
@@ -67,6 +78,13 @@ public:
   static bool isMacro(const std::wstring& name);
 
   static void _init_();
+
+  // Record the current macro state as the built-in baseline. Call once after
+  // _init_ has registered all predefined commands/environments.
+  static void _captureBuiltins();
+
+  // Roll back to the built-in baseline, dropping anything a formula defined.
+  static void _reset();
 
   static void _free_();
 

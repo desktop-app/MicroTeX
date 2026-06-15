@@ -9,13 +9,23 @@ using namespace tex;
 
 bool NewCommandMacro::_errIfConflict = true;
 
+map<wstring, wstring> NewCommandMacro::_baselineCodes;
+map<wstring, wstring> NewCommandMacro::_baselineReplacements;
+set<wstring> NewCommandMacro::_builtinCommands;
+
 bool NewCommandMacro::isMacro(const wstring& name) {
   auto it = _codes.find(name);
   return (it != _codes.end());
 }
 
 void NewCommandMacro::checkNew(const wstring& name) {
-  if (_errIfConflict && isMacro(name))
+  // Reject redefining a built-in too (not just an existing user macro): a
+  // user \newcommand{\frac}{...} would otherwise replace and free the
+  // built-in for every later formula. _builtinCommands is empty during
+  // _init_, so the predefined registrations below are unaffected.
+  if (_errIfConflict
+      && (isMacro(name)
+          || _builtinCommands.find(name) != _builtinCommands.end()))
     throw ex_parse(
       "Command " + wide2utf8(name)
       + " already exists! Use renewcommand instead!"
@@ -23,11 +33,43 @@ void NewCommandMacro::checkNew(const wstring& name) {
 }
 
 void NewCommandMacro::checkRenew(const wstring& name) {
+  // Never let a formula redefine a built-in command/environment.
+  if (_builtinCommands.find(name) != _builtinCommands.end())
+    throw ex_parse(
+      "Command " + wide2utf8(name) + " is built-in and can not be redefined!"
+    );
   if (NewCommandMacro::_errIfConflict && !isMacro(name))
     throw ex_parse(
       "Command " + wide2utf8(name)
       + " is no defined! Use newcommand instead!"
     );
+}
+
+void NewCommandMacro::_captureBuiltins() {
+  _baselineCodes = _codes;
+  _baselineReplacements = _replacements;
+  _builtinCommands.clear();
+  for (const auto& entry : MacroInfo::_commands) {
+    _builtinCommands.insert(entry.first);
+  }
+}
+
+void NewCommandMacro::_reset() {
+  // Drop every command the previous formula added -- anything not in the
+  // built-in snapshot -- freeing the user-owned MacroInfo objects. Built-in
+  // pointers are never touched here (and checkNew/checkRenew prevent a
+  // formula from replacing them), so they stay valid for the next render.
+  if (_builtinCommands.empty()) return;  // _captureBuiltins not run yet
+  for (auto it = MacroInfo::_commands.begin(); it != MacroInfo::_commands.end();) {
+    if (_builtinCommands.find(it->first) == _builtinCommands.end()) {
+      delete it->second;
+      it = MacroInfo::_commands.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  _codes = _baselineCodes;
+  _replacements = _baselineReplacements;
 }
 
 void NewCommandMacro::addNewCommand(const wstring& name, const wstring& code, int argc) {

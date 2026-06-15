@@ -1,5 +1,7 @@
 #include "latex.h"
 
+#include "atom/atom_matrix.h"
+#include "atom/atom_row.h"
 #include "core/core.h"
 #include "core/formula.h"
 #include "core/macro.h"
@@ -109,6 +111,11 @@ void LaTeX::init(string res_root_path) {
   Formula::_init_();
   TextRenderingBox::_init_();
 
+  // Snapshot the built-in macro set now that all predefined commands and
+  // environments are registered, so _reset() (run before each parse) can
+  // roll back anything a formula defines without dropping the built-ins.
+  NewCommandMacro::_captureBuiltins();
+
   _formula = new Formula();
   _builder = new TeXRenderBuilder();
 }
@@ -124,6 +131,11 @@ void LaTeX::initBundled() {
   DefaultTeXFont::_init_();
   Formula::_init_();
   TextRenderingBox::_init_();
+
+  // Snapshot the built-in macro set now that all predefined commands and
+  // environments are registered, so _reset() (run before each parse) can
+  // roll back anything a formula defines without dropping the built-ins.
+  NewCommandMacro::_captureBuiltins();
 
   _formula = new Formula();
   _builder = new TeXRenderBuilder();
@@ -149,6 +161,15 @@ void LaTeX::setDebug(bool debug) {
 }
 
 TeXRender* LaTeX::parse(const wstring& latex, int width, float textSize, float lineSpace, color fg) {
+  // Untrusted input: roll back any global state a previous formula mutated
+  // (user macros, \newcolumntype column types, \arrayrulecolor line color,
+  // \breakEverywhere) so definitions can't leak between formulas. A formula's
+  // own definitions still apply within itself (they are made during this
+  // parse, after this reset).
+  NewCommandMacro::_reset();
+  MatrixAtom::resetState();
+  RowAtom::_breakEveywhere = false;
+
   bool lined = true;
   if (startswith(latex, L"$$") || startswith(latex, L"\\[")) {
     lined = false;

@@ -47,6 +47,12 @@ inline macro(multirow) {
   if (!tp.isArrayMode()) throw ex_parse("Command \\multirow must used in array environment!");
   int n = 0;
   valueof(args[1], n);
+  // Bound the row span: matrix layout later computes abs(n) and r + n, so
+  // INT_MIN (abs is undefined) and huge magnitudes (overflow) must be
+  // rejected. Real multirow spans are small.
+  constexpr int kMaxArrayRowSpan = 1000;
+  if (n < -kMaxArrayRowSpan || n > kMaxArrayRowSpan)
+    throw ex_parse("Bad row span in multirow!");
   tp.addAtom(sptrOf<MultiRowAtom>(n, args[2], Formula(tp, args[3])._root));
   return nullptr;
 }

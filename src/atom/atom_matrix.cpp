@@ -22,6 +22,13 @@ void MatrixAtom::defineColumnSpecifier(const wstring& rep, const wstring& spe) {
   _colspeReplacement[rep] = spe;
 }
 
+void MatrixAtom::resetState() {
+  // There are no built-in column types, so clearing is enough; the line
+  // color goes back to its default (transparent = use current foreground).
+  _colspeReplacement.clear();
+  LINE_COLOR = transparent;
+}
+
 void MatrixAtom::parsePositions(wstring opt, vector<Alignment>& lpos) {
   int len = opt.length();
   int pos = 0;
@@ -30,7 +37,16 @@ void MatrixAtom::parsePositions(wstring opt, vector<Alignment>& lpos) {
   sptr<TeXParser> tp;
   // clear first
   lpos.clear();
+  // Total work budget for the whole spec. A self-referential \newcolumntype
+  // (e.g. \newcolumntype{A}{A} then \begin{array}{A}) re-inserts its own name
+  // and rewinds, looping forever; nested or repeated expansions can also run
+  // away. Each loop turn produces at most one column or one expansion step,
+  // so a step cap bounds them all. Real specs need only a handful of turns.
+  constexpr int kMaxColumnSpecSteps = 100000;
+  int steps = 0;
   while (pos < len) {
+    if (++steps > kMaxColumnSpecSteps)
+      throw ex_parse("Column specification is too complex!");
     ch = opt[pos];
     switch (ch) {
       case 'l':
@@ -79,13 +95,14 @@ void MatrixAtom::parsePositions(wstring opt, vector<Alignment>& lpos) {
         pos += tp->getPos();
         int nrep = 0;
         valueof(args[1], nrep);
-        // Clamp the column-spec repeat count: an unbounded user value (e.g.
-        // \begin{array}{*{99999999}{c}}) would build a gigantic spec string
-        // and one column per copy, allocating gigabytes and stalling. Real
-        // specs repeat a handful of times.
+        // Reject an out-of-range column-spec repeat count: an unbounded user
+        // value (e.g. \begin{array}{*{99999999}{c}}) would build a gigantic
+        // spec string and one column per copy, allocating gigabytes and
+        // stalling. Throwing (rather than silently clamping) avoids rendering
+        // a different number of columns than requested.
         constexpr int kMaxColumnSpecRepeat = 1000;
-        if (nrep < 0) nrep = 0;
-        else if (nrep > kMaxColumnSpecRepeat) nrep = kMaxColumnSpecRepeat;
+        if (nrep < 0 || nrep > kMaxColumnSpecRepeat)
+          throw ex_parse("Bad column-spec repeat count!");
         wstring str;
         for (int j = 0; j < nrep; j++) str += args[2];
         opt.insert(pos, str);
@@ -408,6 +425,15 @@ sptr<Box> MatrixAtom::createBox(Environment& e) {
   Environment& env = e;
   const int rows = _matrix->rows();
   const int cols = _matrix->cols();
+
+  // Defense-in-depth: this allocates rows*cols box pointers and visits every
+  // cell, so an array with an enormous total cell count (reachable even from
+  // modest input -- one wide row plus many rows) would allocate and churn
+  // unboundedly. Real matrices are tiny; reject absurd totals. Empty arrays
+  // (0 cells) pass through and render as before.
+  constexpr int64_t kMaxArrayCells = 100000;
+  if (int64_t(rows) * int64_t(cols) > kMaxArrayCells)
+    throw ex_parse("Matrix is too large!");
 
   auto* lineDepth = new float[rows]();
   auto* lineHeight = new float[rows]();

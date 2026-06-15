@@ -884,7 +884,10 @@ void TeXParser::parse() {
         if (!_isMathMode) {  // we are in mbox
           TexStyle style = TexStyle::text;
           bool doubleDollar = false;
-          if (_latex[_pos] == DOLLAR) {
+          // Bounds-check: a trailing $ in text mode (e.g. \text{$$}) leaves
+          // _pos at _len here, and getDollarGroup can push it one past _len,
+          // so an unguarded _latex[_pos] reads out of range.
+          if (_pos < _len && _latex[_pos] == DOLLAR) {
             style = TexStyle::display;
             doubleDollar = true;
             _pos++;
@@ -896,7 +899,7 @@ void TeXParser::parse() {
           );
           _formula->add(atom);
           if (doubleDollar) {
-            if (_latex[_pos] == DOLLAR) _pos++;
+            if (_pos < _len && _latex[_pos] == DOLLAR) _pos++;
           }
         }
       }

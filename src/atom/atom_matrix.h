@@ -139,6 +139,11 @@ public:
 
   static void defineColumnSpecifier(const std::wstring& rep, const std::wstring& spe);
 
+  // Reset the globally-mutable matrix state (user-defined column types via
+  // \newcolumntype and the \arrayrulecolor line color) back to defaults, so
+  // one formula's definitions do not leak into later ones.
+  static void resetState();
+
   __decl_clone(MatrixAtom)
 };
 
