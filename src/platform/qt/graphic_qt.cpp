@@ -62,24 +62,10 @@ QString wstring_to_QString(const std::wstring& ws)
 }
 }
 
-namespace {
-
-// The bundled TeX fonts carry ancient TrueType hinting bytecode and we
-// rasterize them at huge pixel sizes (the exact-metric supersampling),
-// which makes FreeType fail glyphs with FT_Err_Raster_Overflow (0x62)
-// on systems whose fontconfig requests full hinting. Hinting is useless
-// at these sizes, so opt out of it (and of the system hinting config).
-void disableHinting(QFont& font) {
-  font.setHintingPreference(QFont::PreferNoHinting);
-}
-
-} // namespace
-
 Font_qt::Font_qt(const string& family, int style, float size) {
 
 //  qInfo() << "new font" << QString::fromStdString(family) << style << size;
 
-  disableHinting(_font);
   _font.setFamily(QString::fromStdString(family));
   // PROBE PATCH: MicroTeX's layout treats `size' as pixels; setPointSizeF
   // would re-scale by the platform DPI (e.g. 1.33x on Windows 96 DPI),
@@ -98,7 +84,6 @@ Font_qt::Font_qt(const string& file, float size)
 
   // set size for newly loaded and previously loaded font
   // PROBE PATCH: see Font_qt(family, style, size) above.
-  disableHinting(_font);
   _font.setPixelSize(qMax(1, int(qRound(size))));
 
   QString filename(QString::fromStdString(file));
