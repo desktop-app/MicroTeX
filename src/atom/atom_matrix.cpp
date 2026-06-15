@@ -79,6 +79,13 @@ void MatrixAtom::parsePositions(wstring opt, vector<Alignment>& lpos) {
         pos += tp->getPos();
         int nrep = 0;
         valueof(args[1], nrep);
+        // Clamp the column-spec repeat count: an unbounded user value (e.g.
+        // \begin{array}{*{99999999}{c}}) would build a gigantic spec string
+        // and one column per copy, allocating gigabytes and stalling. Real
+        // specs repeat a handful of times.
+        constexpr int kMaxColumnSpecRepeat = 1000;
+        if (nrep < 0) nrep = 0;
+        else if (nrep > kMaxColumnSpecRepeat) nrep = kMaxColumnSpecRepeat;
         wstring str;
         for (int j = 0; j < nrep; j++) str += args[2];
         opt.insert(pos, str);

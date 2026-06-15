@@ -29,6 +29,10 @@ private:
   int _line, _col;
   int _group;
   int _atIsLetter;
+  // Number of \newcommand-style macro inflations done so far in this parser's
+  // preprocess pass; bounded to stop self-referential macros (e.g.
+  // \newcommand{\x}{\x}\x) from looping forever. See inflateNewCmd.
+  int _expansions = 0;
   bool _insertion;
   bool _arrayMode;
   bool _isMathMode;

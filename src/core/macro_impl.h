@@ -542,11 +542,19 @@ inline macro(matrixATATenv) {
   return sptrOf<MatrixAtom>(tp.isPartial(), sptr<ArrayFormula>(arr), MatrixType::matrix);
 }
 
+// Upper bound on the column span of \multicolumn / \hdotsfor. ArrayFormula::
+// addCol(n) pushes n placeholder cells, so an unbounded user count (e.g.
+// \multicolumn{99999999}{c}{x}) would allocate gigabytes and stall. Real
+// tables never approach this.
+constexpr int kMaxArrayColumnSpan = 1000;
+
 inline macro(multicolumn) {
   if (!tp.isArrayMode())
     throw ex_parse("Command 'multicolumn' only available in array mode!");
   int n = 0;
   valueof(args[1], n);
+  if (n <= 0 || n > kMaxArrayColumnSpan)
+    throw ex_parse("Bad column span in multicolumn!");
   const std::string x = wide2utf8(args[2]);
   tp.addAtom(sptrOf<MulticolumnAtom>(n, x, Formula(tp, args[3])._root));
   ((ArrayFormula*) tp._formula)->addCol(n);
@@ -558,6 +566,8 @@ inline macro(hdotsfor) {
     throw ex_parse("Command 'hdotsfor' only available in array mode!");
   int n = 0;
   valueof(args[1], n);
+  if (n <= 0 || n > kMaxArrayColumnSpan)
+    throw ex_parse("Bad column span in hdotsfor!");
   float f = 1.f;
   if (!args[2].empty()) valueof(args[2], f);
   tp.addAtom(sptrOf<HdotsforAtom>(n, f));
@@ -1427,6 +1437,9 @@ inline macro(insertBreakMark) {
 
 inline sptr<Atom> _limits_type(TeXParser& tp, Args& args, LimitsType type) {
   auto atom = tp.popLastAtom();
+  // \limits / \nolimits with no preceding atom (e.g. a bare "\limits" or one
+  // right after a group boundary): nothing to attach the limits mode to.
+  if (atom == nullptr) return nullptr;
   auto copy = atom->clone();
   copy->_limitsType = type;
   return copy;
