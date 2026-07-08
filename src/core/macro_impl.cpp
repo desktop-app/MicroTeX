@@ -126,6 +126,13 @@ sptr<Atom> _frac_with_delims(TeXParser& tp, Args& args, bool rule, bool hasLengt
   pair<UnitType, float> l;
   if (hasLength) l = tp.getLength();
   auto[unit, value] = l;
+  // A bare \abovewithdelims with no dimension leaves the parser at
+  // end-of-input, where getLength() returns UnitType::none (= -1). Building the
+  // FractionAtom with that unit later indexes the unit-conversion table at -1
+  // (out of bounds) while measuring the fraction rule, so reject the missing
+  // argument here instead of rendering a broken fraction.
+  if (hasLength && unit == UnitType::none)
+    throw ex_parse("Missing dimension for \\abovewithdelims!");
   auto den = Formula(tp, tp.getOverArgument(), false)._root;
 
   if (num == nullptr || den == nullptr)

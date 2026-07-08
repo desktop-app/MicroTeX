@@ -235,6 +235,12 @@ inline macro(binom) {
 inline macro(above) {
   auto num = tp.popFormulaAtom();
   auto[unit, value] = tp.getLength();
+  // A bare \above with no dimension leaves the parser at end-of-input, where
+  // getLength() returns UnitType::none (= -1). Building the FractionAtom with
+  // that unit later indexes the unit-conversion table at -1 (out of bounds)
+  // while measuring the fraction rule, so reject the missing argument here
+  // instead of rendering a broken fraction.
+  if (unit == UnitType::none) throw ex_parse("Missing dimension for \\above!");
   auto den = Formula(tp, tp.getOverArgument(), false)._root;
   if (num == nullptr || den == nullptr)
     throw ex_parse("Both numerator and denominator of a fraction can't be empty!");
