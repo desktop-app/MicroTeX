@@ -310,7 +310,12 @@ void MatrixAtom::recalculateLine(
       b->_height = (h - bh + vspace) / 2.f;
     } else if (h < bh) {
       const float ex = (bh - h) / skipped / 2.f;
-      const int mr = m->_i + m->_n;
+      // Clamp the span end to the real row count. A multirow whose requested
+      // span exceeds the rows below it (e.g. \multirow{20}{*}{x} in a
+      // single-row matrix) keeps _n at the full span, so an unclamped
+      // m->_i + m->_n walks off boxarr/height/depth. The top-to-bottom scan
+      // above already clamps with `j < rows`; this loop must too.
+      const int mr = min(m->_i + m->_n, rows);
       for (int j = m->_i; j < mr; j++) {
         if (boxarr[j][0]->_type != AtomType::hline) {
           height[j] += ex;

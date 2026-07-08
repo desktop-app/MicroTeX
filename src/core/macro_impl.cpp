@@ -11,6 +11,12 @@ namespace tex {
 
 macro(kern) {
   auto[unit, value] = tp.getLength();
+  // A bare \kern with no dimension leaves the parser at end-of-input, where
+  // getLength() returns UnitType::none (= -1). Building a SpaceAtom with that
+  // unit later indexes the unit-conversion table at -1 (out of bounds) while
+  // measuring the space, so reject the missing argument here instead of
+  // rendering a broken space.
+  if (unit == UnitType::none) throw ex_parse("Missing dimension for \\kern!");
   return sptrOf<SpaceAtom>(unit, value, 0.f, 0.f);
 }
 
