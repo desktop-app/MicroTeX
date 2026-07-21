@@ -47,7 +47,12 @@ public:
   const T* operator()(const Ks&... keys) const {
     if (_raw == nullptr) return nullptr;
     const T k[] = {keys...};
-    int     l = 0, h = _rows;
+    // The search is inclusive on both bounds (l <= h below), so the upper
+    // bound must be the last row, not _rows: with h = _rows a key greater
+    // than every entry drives m up to _rows and compares against the row
+    // one past the end of the table -- an out-of-bounds read that can also
+    // "find" a garbage match there and return a pointer past the table.
+    int     l = 0, h = int(_rows) - 1;
     while (l <= h) {
       const int  m   = l + ((h - l) >> 1);
       const T*   r   = _raw + (m * N);

@@ -210,8 +210,15 @@ void ArrayFormula::addCol(int n) {
 void ArrayFormula::insertAtomIntoCol(int col, const sptr<Atom>& atom) {
   _col++;
   for (size_t j = 0; j < _row; j++) {
-    auto it = _array[j].begin();
-    _array[j].insert(it + col, atom);
+    auto& row = _array[j];
+    // Rows may be shorter than the insertion column: checkDimensions() leaves
+    // rows starting with an empty or intertext cell unpadded (e.g. the empty
+    // first row of \begin{array}{ccc@{x}}\\a&b&c\end{array} keeps one cell
+    // while cols() is 3), so inserting at begin() + col would write past the
+    // end of such a row. Pad with empty cells first, which also places the
+    // @-separator atom in its intended column for those rows.
+    if (row.size() < size_t(col)) row.resize(col, nullptr);
+    row.insert(row.begin() + col, atom);
   }
 }
 
