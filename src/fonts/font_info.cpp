@@ -15,12 +15,20 @@ void FontInfo::__register(const FontSet& set) {
   for (auto r : regs) r.reg();
 }
 
+// The +1 skips the key column of the found row, but it must only be applied
+// to a row that exists: a lookup miss returns nullptr, and nullptr + 1 is
+// undefined behaviour that in practice produces the non-null 0x4. Callers
+// test the result against nullptr to decide whether the char is present
+// (isExtensionChar()), so a bare +1 makes every miss look like a hit and the
+// dereference that follows then faults on 0x4.
 const float* const FontInfo::getMetrics(wchar_t ch) const {
-  return _metrics.isEmpty() ? nullptr : _metrics((float)ch) + 1;
+  const float* const item = _metrics((float)ch);
+  return item == nullptr ? nullptr : item + 1;
 }
 
 const int* const FontInfo::getExtension(wchar_t ch) const {
-  return _extensions.isEmpty() ? nullptr : _extensions((int)ch) + 1;
+  const int* const item = _extensions((int)ch);
+  return item == nullptr ? nullptr : item + 1;
 }
 
 //sptr<CharFont> FontInfo::getNextLarger(wchar_t ch) const {

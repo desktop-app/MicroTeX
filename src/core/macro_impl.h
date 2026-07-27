@@ -1050,14 +1050,20 @@ inline macro(textitbf) {
 }
 
 inline macro(declaremathsizes) {
-  float a, b, c, d;
+  // Zero-initialised like every other valueof() target: these feed
+  // process-global settings, so an argument valueof() cannot parse must leave
+  // them alone rather than pass whatever happened to be on the stack.
+  // setMathSizes() rejects a zero first size, which makes that case a no-op.
+  float a = 0, b = 0, c = 0, d = 0;
   valueof(args[1], a), valueof(args[2], b), valueof(args[3], c), valueof(args[4], d);
   DefaultTeXFont::setMathSizes(a, b, c, c);
   return nullptr;
 }
 
 inline macro(magnification) {
-  float x;
+  // Zero is rejected by setMagnification(), so an unparseable argument
+  // leaves the global magnification untouched.
+  float x = 0;
   valueof(args[1], x);
   DefaultTeXFont::setMagnification(x);
   return nullptr;

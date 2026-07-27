@@ -846,11 +846,25 @@ void TeXParser::preprocess() {
   _len = _latex.length();
 }
 
+void TeXParser::addEmptyRootIfNeeded() {
+  // Array mode is excluded because there the cells, not the root, carry the
+  // content, and an added atom would become a stray extra cell.
+  if (_formula->_root == nullptr && !_arrayMode) {
+    _formula->add(sptrOf<EmptyAtom>());
+  }
+}
+
 void TeXParser::parse() {
   ParseDepthGuard depthGuard;
+  // Input that produces no atom at all must still leave a root behind: the
+  // ~40 wrapper atoms built from macro arguments (TextStyleAtom, LapedAtom,
+  // TypedAtom, ScaleAtom, RotateAtom, ...) dereference their base unchecked.
+  // An empty argument was already covered here, but a blank one -- "{ }",
+  // "{\t}", "{~}" -- parses successfully and simply adds nothing, so the
+  // substitution has to happen after the loop as well, not just on this
+  // early return.
   if (_len == 0) {
-    if (_formula->_root == nullptr && !_arrayMode)
-      _formula->add(sptrOf<EmptyAtom>());
+    addEmptyRootIfNeeded();
     return;
   }
 
@@ -993,6 +1007,8 @@ void TeXParser::parse() {
         break;
     }
   }
+
+  addEmptyRootIfNeeded();
 }
 
 sptr<Atom> TeXParser::convertCharacter(wchar_t c, bool oneChar) {

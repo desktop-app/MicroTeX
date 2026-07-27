@@ -108,6 +108,9 @@ private:
     bool firstPass
   );
 
+  /** Give the formula an empty root if parsing produced no atom at all. */
+  void addEmptyRootIfNeeded();
+
 public:
   static bool _isLoading;
 

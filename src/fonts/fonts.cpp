@@ -209,8 +209,15 @@ Char DefaultTeXFont::getChar(
 }
 
 sptr<Metrics> DefaultTeXFont::getMetrics(const CharFont& cf, float size) {
+  static constexpr float kMissing[4] = {0.f, 0.f, 0.f, 0.f};
+
   auto info = getInfo(cf.fontId);
   const float* m = info->getMetrics(cf.chr);
+  // The bundled fonts do currently list metrics for every char their
+  // extension and next-larger tables point at, but nothing enforces that, and
+  // getMetrics() now reports a miss as nullptr rather than as the 0x4 that
+  // used to fault here. Measure an unknown char as empty instead.
+  if (m == nullptr) m = kMissing;
   Metrics* met = new Metrics(
     m[WIDTH], m[HEIGHT], m[DEPTH], m[IT], size * Formula::PIXELS_PER_POINT, size);
   return sptr<Metrics>(met);
@@ -223,6 +230,10 @@ Extension* DefaultTeXFont::getExtension(const Char& c, TexStyle style) {
   // construct Char for every part
   auto info = getInfo(fc);
   const int* ext = info->getExtension(c.getChar());
+  // The largest char of a delimiter chain isn't required to be extensible:
+  // \langle, \rangle, / and \backslash all end on cmex10 chars that have no
+  // extension recipe, and TeX just uses the tallest variant for those.
+  if (ext == nullptr) return nullptr;
   // 4 parts of extensions, TOP, MID, REP, BOT
   Char* parts[4] = {nullptr};
   for (int i = 0; i < 4; i++) {
@@ -271,6 +282,18 @@ float DefaultTeXFont::getSpace(TexStyle style) {
 
 void DefaultTeXFont::setMathSizes(float ds, float ts, float ss, float sss) {
   if (!_magnificationEnable) return;
+  // \DeclareMathSizes feeds these straight from the formula, and valueof()
+  // yields 0 for an argument it cannot parse ("\DeclareMathSizes{}{}"), so
+  // ds can be zero and the divisions below would store inf/NaN. These
+  // settings are process-global and never reset, so a single bad formula
+  // would corrupt the size of every formula parsed afterwards -- and an
+  // infinite minHeight makes the delimiter builder in DelimiterFactory spin.
+  // Ignore the request rather than poison the shared state.
+  if (!std::isfinite(ds) || !std::isfinite(ts)
+      || !std::isfinite(ss) || !std::isfinite(sss)
+      || ds == 0.f) {
+    return;
+  }
   _generalSettings["scriptfactor"] = abs(ss / ds);
   _generalSettings["scriptscriptfactor"] = abs(sss / ds);
   _generalSettings["textfactor"] = abs(ts / ds);
@@ -279,7 +302,18 @@ void DefaultTeXFont::setMathSizes(float ds, float ts, float ss, float sss) {
 
 void DefaultTeXFont::setMagnification(float mag) {
   if (!_magnificationEnable) return;
+  // Same story as setMathSizes: \magnification takes its value from the
+  // formula and _magFactor is process-global. Non-positive would collapse
+  // every later formula to nothing, so treat it as "not specified".
+  if (!std::isfinite(mag) || mag <= 0.f) return;
   TeXRender::_magFactor = mag / 1000.f;
+}
+
+void DefaultTeXFont::resetMathSizes() {
+  __default_general_settings();
+  // -1 and 0 are the "not specified" sentinels TeXRender::setTextSize tests.
+  TeXRender::_defaultSize = -1;
+  TeXRender::_magFactor = 0;
 }
 
 void DefaultTeXFont::enableMagnification(bool b) {

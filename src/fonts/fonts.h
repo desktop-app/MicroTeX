@@ -254,6 +254,13 @@ public:
 
   static void setMagnification(float mag);
 
+  /**
+   * Restore the process-global math sizes to their defaults, so that
+   * \DeclareMathSizes or \magnification used by one formula cannot change how
+   * every formula parsed afterwards is rendered.
+   */
+  static void resetMathSizes();
+
   static void enableMagnification(bool b);
 
   /**
