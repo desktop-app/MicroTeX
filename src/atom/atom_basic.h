@@ -556,10 +556,14 @@ public:
   ScriptsAtom() = delete;
 
   ScriptsAtom(const sptr<Atom>& base, const sptr<Atom>& sub, const sptr<Atom>& sup)
-    : _base(base), _sub(sub), _sup(sup), _align(Alignment::left) {}
+    : _base(base), _sub(sub), _sup(sup), _align(Alignment::left) {
+    inheritWrapDepth(base);
+  }
 
   ScriptsAtom(const sptr<Atom>& base, const sptr<Atom>& sub, const sptr<Atom>& sup, bool left)
-    : _base(base), _sub(sub), _sup(sup), _align(left ? Alignment::left : Alignment::right) {}
+    : _base(base), _sub(sub), _sup(sup), _align(left ? Alignment::left : Alignment::right) {
+    inheritWrapDepth(base);
+  }
 
   AtomType leftType() const override {
     return _base == nullptr ? _type : _base->leftType();

@@ -170,6 +170,7 @@ TeXRender* LaTeX::parse(const wstring& latex, int width, float textSize, float l
   MatrixAtom::resetState();
   RowAtom::_breakEveywhere = false;
   DefaultTeXFont::resetMathSizes();
+  resetBoxBudget();
 
   bool lined = true;
   if (startswith(latex, L"$$") || startswith(latex, L"\\[")) {

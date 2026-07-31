@@ -9,6 +9,29 @@ namespace tex {
 class Environment;
 
 /**
+ * Per-formula budget for the size of the box tree.
+ *
+ * The existing guards each bound one specific way a formula can run away
+ * (recursion depth, macro expansions, individual macro arguments). This one
+ * is the backstop for the rest: whatever a formula does, it ends up building
+ * boxes, so counting them bounds the total work regardless of which code path
+ * produced it. It catches both shapes that a per-macro check misses -- a loop
+ * that appends boxes without recursing, and a short input whose cost is
+ * multiplied at every one of a few hundred nesting levels.
+ *
+ * The count covers boxes constructed and boxes appended to a group, because a
+ * group can be grown by re-appending one shared box without constructing
+ * anything. Exceeding the budget throws ex_parse, which callers already treat
+ * as "this formula does not render" -- and any formula near the limit would be
+ * rejected by the caller's render-size cap anyway, just far more expensively.
+ *
+ * thread_local: formulas may be laid out on several threads at once.
+ */
+void resetBoxBudget();
+void countBoxAllocation();
+int usedBoxBudget();
+
+/**
  * An abstract graphical representation of a formula, that can be painted. All
  * characters, font sizes, positions are fixed. Only special Glue boxes could
  * possibly stretch or shrink. A box has 3 dimensions (width, height and depth),
@@ -59,7 +82,7 @@ public:
   AtomType _type = AtomType::none;
 
   /** Create a new box with default options */
-  Box() { init(); }
+  Box() { countBoxAllocation(); init(); }
 
   /** Copy the metrics from another box */
   void copyMetrics(const sptr<Box>& box);
@@ -112,6 +135,7 @@ public:
    * @param box the box to be append
    */
   virtual void add(const sptr<Box>& box) {
+    countBoxAllocation();
     _children.push_back(box);
   }
 
@@ -122,6 +146,7 @@ public:
    * @param box the box to be inserted
    */
   virtual void add(int pos, const sptr<Box>& box) {
+    countBoxAllocation();
     _children.insert(_children.begin() + pos, box);
   }
 

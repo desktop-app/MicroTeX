@@ -15,9 +15,10 @@ class Glue {
 private:
   constexpr static int TYPE_COUNT = 8;
   constexpr static int STYLE_COUNT = 5;
+  constexpr static int GLUE_TYPE_COUNT = 4;
 
   // contains the different glue types
-  static const Glue _glueTypes[4];
+  static const Glue _glueTypes[GLUE_TYPE_COUNT];
   // the glue table represents the "glue rules"
   static const char _table[TYPE_COUNT][TYPE_COUNT][STYLE_COUNT];
 

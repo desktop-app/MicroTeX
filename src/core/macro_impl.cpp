@@ -105,8 +105,14 @@ macro(genfrac) {
     rule = false;
   }
 
+  // The style selects a TexStyle via style * 2, and that value ends up
+  // indexing the glue table in Glue::indexOf (as style / 2, against
+  // STYLE_COUNT entries). Anything outside 0..3 reads outside the table --
+  // and the multiplication itself overflows for a large value. LaTeX defines
+  // exactly these four styles for \genfrac.
   int style = 0;
   if (!args[4].empty()) valueof(args[4], style);
+  if (style < 0 || style > 3) throw ex_parse("Bad style in genfrac!");
 
   Formula num(tp, args[5], false);
   Formula den(tp, args[6], false);
@@ -298,6 +304,8 @@ macro(newcommand) {
     throw ex_parse("Invalid name for the command '" + wide2utf8(newcmd));
 
   if (!args[3].empty()) valueof(args[3], nbArgs);
+  if (!isValidMacroArgc(nbArgs))
+    throw ex_parse("Bad number of arguments in newcommand!");
 
   if (args[4].empty()) {
     NewCommandMacro::addNewCommand(newcmd.substr(1), args[2], nbArgs);
@@ -315,6 +323,8 @@ macro(renewcommand) {
     throw ex_parse("Invalid name for the command: " + wide2utf8(newcmd));
 
   if (!args[3].empty()) valueof(args[3], nbArgs);
+  if (!isValidMacroArgc(nbArgs))
+    throw ex_parse("Bad number of arguments in renewcommand!");
 
   if (args[4].empty()) {
     NewCommandMacro::addRenewCommand(newcmd.substr(1), args[2], nbArgs);
@@ -343,7 +353,7 @@ macro(definecolor) {
     StrTokenizer stok(cs, ":,");
     if (stok.count() != 3)
       throw ex_parse("The color definition must have three components!");
-    float r, g, b;
+    float r = 0.f, g = 0.f, b = 0.f;
     string R = stok.next(), G = stok.next(), B = stok.next();
     valueof(trim(R), r);
     valueof(trim(G), g);
@@ -353,7 +363,7 @@ macro(definecolor) {
     StrTokenizer stok(cs, ":,");
     if (stok.count() != 4)
       throw ex_parse("The color definition must have four components!");
-    float cmyk[4];
+    float cmyk[4] = {0.f, 0.f, 0.f, 0.f};
     for (float& i : cmyk) {
       string X = stok.next();
       valueof(trim(X), i);
@@ -400,9 +410,17 @@ macro(romannumeral) {
   string letters[] = {"M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"};
   string roman;
 
-  int num;
+  // Every further thousand appends another "M", so the value below decides
+  // how many atoms this one command expands to. It arrives straight from the
+  // formula, and valueof leaves the target untouched when the argument is not
+  // a number at all, so it has to start at zero and be bounded before it
+  // reaches the loop -- \roman{2147483647} otherwise builds two million
+  // characters. Roman notation does not extend past a few thousand anyway.
+  constexpr int kMaxRomanNumeral = 100000;
+  int num = 0;
   string x = wide2utf8(args[1]);
   valueof(trim(x), num);
+  if (num > kMaxRomanNumeral) throw ex_parse("Value too large for a roman numeral!");
   for (int i = 0; i < 13; i++) {
     while (num >= numbers[i]) {
       roman += letters[i];

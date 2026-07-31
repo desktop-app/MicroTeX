@@ -32,7 +32,23 @@ public:
   /** The alignment type of the atom (default value: none) */
   Alignment _alignment = Alignment::none;
 
+  /**
+   * How many wrapper atoms deep this atom sits.
+   *
+   * Some atoms attach themselves to whatever atom precedes them -- scripts and
+   * big-operator limits do -- so a flat run of them ("x^1^1^1", "\sum^1^1^1")
+   * builds an atom chain as long as the run, without ever nesting the parser.
+   * The parse depth limit therefore never sees it, while createBox() walks the
+   * chain recursively and overflows the stack, which no caller can catch.
+   * Wrappers that can chain call inheritWrapDepth() so the chain is bounded
+   * wherever it is built, and across differing wrapper types.
+   */
+  int _wrapDepth = 0;
+
   Atom() = default;
+
+  /** Adopt the base atom's chain depth, refusing to extend it too far. */
+  void inheritWrapDepth(const sptr<Atom>& base);
 
   /**
    * Get the type of the leftermost child atom. Most atoms have no child

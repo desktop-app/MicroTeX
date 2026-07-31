@@ -2,6 +2,8 @@
 #include "core/glue.h"
 #include "core/core.h"
 
+#include <cmath>
+
 using namespace std;
 using namespace tex;
 
@@ -32,6 +34,13 @@ pair<UnitType, float> SpaceAtom::getLength(const string& lgth) {
   for (; i < lgth.size() && !isalpha(lgth[i]); i++);
   float f = 0;
   valueof(lgth.substr(0, i), f);
+  // A literal too large for a float leaves infinity here, which then spreads
+  // through every box built from this length: layout loops that advance by a
+  // fraction of it never terminate, and the final cast of the render size to
+  // an integer is undefined. Every explicit length in a formula -- \rule,
+  // \hspace, \raisebox and the rest -- is parsed here, so clearing it once at
+  // this point keeps the whole box tree finite.
+  if (!std::isfinite(f)) f = 0.f;
 
   UnitType unit = UnitType::pixel;
   string x = lgth.substr(i);

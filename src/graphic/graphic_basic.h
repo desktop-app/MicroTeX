@@ -37,8 +37,26 @@ inline color rgb(int r, int g, int b) {
   return argb(0xff, r, g, b);
 }
 
+// Colour components reach here straight from a formula (\definecolor and
+// friends), so they can be out of range, infinite or NaN. Casting such a
+// value to int is undefined, and the result would also corrupt the
+// neighbouring channels once shifted into place, so fold every component back
+// into the representable range first. NaN fails both comparisons and lands
+// on 0.
+inline int colorComponent(float value) {
+  const auto scaled = value * 255.f;
+  if (!(scaled > 0.f)) return 0;
+  if (!(scaled < 255.f)) return 255;
+  return (int) scaled;
+}
+
 inline color argb(float a, float r, float g, float b) {
-  return argb((int) (a * 255), (int) (r * 255), (int) (g * 255), (int) (b * 255));
+  return argb(
+    colorComponent(a),
+    colorComponent(r),
+    colorComponent(g),
+    colorComponent(b)
+  );
 }
 
 inline color rgb(float r, float g, float b) {

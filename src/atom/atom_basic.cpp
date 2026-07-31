@@ -444,6 +444,17 @@ sptr<Box> UnderOverAtom::createBox(Environment& env) {
 
 SpaceAtom ScriptsAtom::SCRIPT_SPACE(UnitType::point, 0.5f, 0.f, 0.f);
 
+void Atom::inheritWrapDepth(const sptr<Atom>& base) {
+  if (base == nullptr) return;
+  _wrapDepth = base->_wrapDepth + 1;
+  // Matches the parser's own nesting limit: the two bound the same thing --
+  // how deep createBox() will recurse -- just reached by different routes.
+  constexpr int kMaxWrapDepth = 250;
+  if (_wrapDepth > kMaxWrapDepth) {
+    throw ex_parse("Formula nesting is too deep!");
+  }
+}
+
 sptr<Box> ScriptsAtom::createBox(Environment& env) {
   if (_base == nullptr) {
     auto in = sptrOf<CharAtom>(L'M', "mathnormal");
@@ -593,6 +604,9 @@ sptr<Box> ScriptsAtom::createBox(Environment& env) {
 /************************************ BigOperatorAtom implementation ******************************/
 
 void BigOperatorAtom::init(const sptr<Atom>& base, const sptr<Atom>& under, const sptr<Atom>& over) {
+  // A big operator keeps its type when wrapped, so repeated scripts on one
+  // ("\sum^1^1^1") chain BigOperatorAtoms just as scripts chain ScriptsAtoms.
+  inheritWrapDepth(base);
   _base = base;
   _under = under;
   _over = over;

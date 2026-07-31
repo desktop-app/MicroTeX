@@ -10,6 +10,21 @@
 
 namespace tex {
 
+/**
+ * Upper bound on the number of arguments a macro may declare, matching the
+ * limit LaTeX itself imposes on \newcommand (the widest built-in here takes
+ * 6). TeXParser::getOptsArgs sizes its argument vector from this count and
+ * indexes that vector relative to it, so a count that is negative or wildly
+ * large turns into out-of-bounds accesses and unbounded allocations. The
+ * count reaches MacroInfo straight from the formula text, so it has to be
+ * rejected before it gets there.
+ */
+constexpr int kMaxMacroArgs = 9;
+
+inline bool isValidMacroArgc(int argc) {
+  return argc >= 0 && argc <= kMaxMacroArgs;
+}
+
 class TeXParser;
 
 class Macro {

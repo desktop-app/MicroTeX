@@ -4,6 +4,7 @@
 #include "core/core.h"
 #include "core/formula.h"
 
+#include <climits>
 #include <cmath>
 
 using namespace std;
@@ -11,8 +12,23 @@ using namespace tex;
 
 namespace {
 
+// Casting a float that is NaN or outside the range of int is undefined, and
+// so is adding two such sizes together. The box dimensions reaching here are
+// built from formula-supplied lengths and scale factors, so both are
+// reachable from a message. Saturating lets the caller see an honestly huge
+// size and reject the formula, rather than a wrapped-around negative one that
+// looks like a valid small size.
 int rasterBound(float value) {
-  return static_cast<int>(std::ceil(value));
+  const auto bound = std::ceil(value);
+  if (!(bound > float(INT_MIN))) return INT_MIN;
+  if (!(bound < float(INT_MAX))) return INT_MAX;
+  return static_cast<int>(bound);
+}
+
+int rasterSum(int a, int b) {
+  if (b > 0 && a > INT_MAX - b) return INT_MAX;
+  if (b < 0 && a < INT_MIN - b) return INT_MIN;
+  return a + b;
 }
 
 }
@@ -85,15 +101,24 @@ float TeXRender::getTextSize() const {
 }
 
 int TeXRender::getHeight() const {
-  return rasterBound(_box->_height * _textSize + _insets.top) + getDepth();
+  return rasterSum(
+    rasterBound(_box->_height * _textSize + _insets.top),
+    getDepth()
+  );
 }
 
 int TeXRender::getDepth() const {
-  return rasterBound(_box->_depth * _textSize + _insets.bottom) + 1;
+  return rasterSum(
+    rasterBound(_box->_depth * _textSize + _insets.bottom),
+    1
+  );
 }
 
 int TeXRender::getWidth() const {
-  return rasterBound(_box->_width * _textSize + _insets.left + _insets.right) + 1;
+  return rasterSum(
+    rasterBound(_box->_width * _textSize + _insets.left + _insets.right),
+    1
+  );
 }
 
 float TeXRender::getBaseline() const {

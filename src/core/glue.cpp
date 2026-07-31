@@ -60,16 +60,23 @@ sptr<Box> Glue::createBox(const Environment& env) const {
   return sptrOf<GlueBox>(_space * factor, _stretch * factor, _shrink * factor);
 }
 
+// Both lookups below are indexed by values that originate outside this file
+// -- the style comes from the environment, which a formula can set (\genfrac
+// picks it directly), and the table entry it selects then indexes _glueTypes.
+// Clamping here keeps a bad value from reading past either array even if a
+// caller lets one through.
 int Glue::indexOf(AtomType ltype, AtomType rtype, const Environment& env) {
   // types > INNER are considered of type ORD for glue calculations
   AtomType l = (ltype > AtomType::inner ? AtomType::ordinary : ltype);
   AtomType r = (rtype > AtomType::inner ? AtomType::ordinary : rtype);
-  const i8 k = static_cast<i8>(env.getStyle()) / 2;
+  const int style = static_cast<i8>(env.getStyle()) / 2;
+  const int k = (style < 0) ? 0 : (style >= STYLE_COUNT ? STYLE_COUNT - 1 : style);
   return _table[static_cast<u8>(l)][static_cast<u8>(r)][k] - '0';
 }
 
 sptr<Box> Glue::get(AtomType ltype, AtomType rtype, const Environment& env) {
-  int i = indexOf(ltype, rtype, env);
+  const int i = indexOf(ltype, rtype, env);
+  if (i < 0 || i >= GLUE_TYPE_COUNT) return sptrOf<GlueBox>(0.f, 0.f, 0.f);
   return _glueTypes[i].createBox(env);
 }
 

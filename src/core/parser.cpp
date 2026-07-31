@@ -14,13 +14,16 @@ using namespace tex;
 
 namespace {
 // Guard against stack overflow from pathologically nested input (deep braces,
-// scripts, \frac/\sqrt nesting). All recursive parsing funnels through
-// TeXParser::parse(): brace groups via getArgument(), scripts via
-// getScripts(), and sub-formulas (\frac, \sqrt, ...) via nested Formula
-// construction. So one depth limit here covers every case and also bounds the
-// depth of the atom tree that createBox() later recurses over. Real formulas
-// nest a few dozen levels at most; the harness overflowed the stack around
-// 1000, so 250 leaves a wide margin while never rejecting legitimate input.
+// scripts, \frac/\sqrt nesting). Recursive parsing takes two routes, and both
+// must be counted: brace groups via getArgument(), scripts via getScripts()
+// and sub-formulas (\frac, \sqrt, ...) via nested Formula construction all
+// re-enter TeXParser::parse(); brace-less command chains ("\sqrt\sqrt x")
+// instead recurse through getCommandWithArgs() without touching parse() at
+// all. Both sites take a guard against this one counter, so the limit bounds
+// their combined depth -- and with it the depth of the atom tree that
+// createBox() later recurses over. Real formulas nest a few dozen levels at
+// most; the harness overflowed the stack around 1000, so 250 leaves a wide
+// margin while never rejecting legitimate input.
 // thread_local because formulas may be parsed on worker threads concurrently.
 constexpr int kMaxParseDepth = 250;
 thread_local int gParseDepth = 0;
@@ -373,6 +376,13 @@ void TeXParser::insert(int beg, int end, const wstring& formula) {
 }
 
 wstring TeXParser::getCommandWithArgs(const wstring& command) {
+  // A command whose argument is another command, with no braces between them
+  // ("\sqrt\sqrt\sqrt x"), recurses getCommandWithArgs -> getOptsArgs ->
+  // getArg -> getCommandWithArgs without ever re-entering parse(), so the
+  // guard there does not see it. Share the same counter: the two recursions
+  // interleave and it is the combined native depth that overflows the stack.
+  ParseDepthGuard depthGuard;
+
   if (command == L"left") return getGroup(L"\\left", L"\\right");
 
   auto mac = MacroInfo::get(command);
@@ -441,6 +451,16 @@ wstring TeXParser::forwardBalancedGroup() {
 }
 
 void TeXParser::getOptsArgs(int argc, int opts, Args& args) {
+  // Every index below is computed from argc, and the option slots start at
+  // argc + 1, so a negative count writes before the start of the vector and a
+  // huge one asks for an allocation that cannot succeed. Callers take argc
+  // from a MacroInfo, which a user-defined command populates from the formula
+  // text, so this is the one place that has to hold the invariant for all of
+  // them regardless of how the macro was defined.
+  if (!isValidMacroArgc(argc)) {
+    throw ex_parse("Bad number of arguments for a command!");
+  }
+
   // A maximum of 10 options can be passed to a command,
   // the value will be added at the tail of the args if found any,
   // the last (maximum to 12th) value is reserved for returned value
@@ -786,7 +806,7 @@ void TeXParser::inflateEnv(wstring& cmd, Args& args, int& pos) {
     );
   }
   vector<wstring> optargs;
-  getOptsArgs(mac->_argc - 1, 0, optargs);
+  if (mac->_argc > 1) getOptsArgs(mac->_argc - 1, 0, optargs);
   wstring grp = getGroup(L"\\begin{" + args[1] + L"}", L"\\end{" + args[1] + L"}");
   wstring expr = L"{\\makeatletter \\" + args[1] + L"@env";
   for (int i = 1; i <= mac->_argc - 1; i++) expr += L"{" + optargs[i] + L"}";
