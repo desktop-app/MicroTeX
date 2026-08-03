@@ -597,7 +597,8 @@ sptr<Box> MatrixAtom::createBox(Environment& e) {
           auto* at = (HlineAtom*) _matrix->_array[i][j].get();
           at->setColor(LINE_COLOR);
           at->setWidth(matW);
-          if (i >= 1 && dynamic_cast<HlineAtom*>(_matrix->_array[i - 1][j].get()) != nullptr) {
+          if (i >= 1 && j < (int) _matrix->_array[i - 1].size()
+              && dynamic_cast<HlineAtom*>(_matrix->_array[i - 1][j].get()) != nullptr) {
             hb->add(sptrOf<StrutBox>(0.f, 2 * drt, 0.f, 0.f));
           }
 
