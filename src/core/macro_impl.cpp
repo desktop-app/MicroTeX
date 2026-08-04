@@ -12,10 +12,9 @@ namespace tex {
 macro(kern) {
   auto[unit, value] = tp.getLength();
   // A bare \kern with no dimension leaves the parser at end-of-input, where
-  // getLength() returns UnitType::none (= -1). Building a SpaceAtom with that
-  // unit later indexes the unit-conversion table at -1 (out of bounds) while
-  // measuring the space, so reject the missing argument here instead of
-  // rendering a broken space.
+  // getLength() returns UnitType::none (= -1). A SpaceAtom built with that
+  // unit names no conversion, so getFactor measures it as no space at all --
+  // reject the missing argument here instead of silently rendering nothing.
   if (unit == UnitType::none) throw ex_parse("Missing dimension for \\kern!");
   return sptrOf<SpaceAtom>(unit, value, 0.f, 0.f);
 }
@@ -133,10 +132,10 @@ sptr<Atom> _frac_with_delims(TeXParser& tp, Args& args, bool rule, bool hasLengt
   if (hasLength) l = tp.getLength();
   auto[unit, value] = l;
   // A bare \abovewithdelims with no dimension leaves the parser at
-  // end-of-input, where getLength() returns UnitType::none (= -1). Building the
-  // FractionAtom with that unit later indexes the unit-conversion table at -1
-  // (out of bounds) while measuring the fraction rule, so reject the missing
-  // argument here instead of rendering a broken fraction.
+  // end-of-input, where getLength() returns UnitType::none (= -1). A
+  // FractionAtom built with that unit names no conversion, so getFactor
+  // measures its rule as no thickness at all -- reject the missing argument
+  // here instead of silently rendering the fraction with no rule.
   if (hasLength && unit == UnitType::none)
     throw ex_parse("Missing dimension for \\abovewithdelims!");
   auto den = Formula(tp, tp.getOverArgument(), false)._root;

@@ -15,7 +15,8 @@ class SpaceAtom : public Atom {
 private:
   static const std::pair<const char*, UnitType> _units[];
   static const i32 _unitsCount;
-  static const std::function<float(const Environment&)> _unitConversions[];
+  static constexpr i32 _unitConversionsCount = static_cast<i32>(UnitType::x8) + 1;
+  static const std::function<float(const Environment&)> _unitConversions[_unitConversionsCount];
 
   // whether a hard space should be represented
   bool _blankSpace = false;
@@ -42,11 +43,22 @@ public:
 
   /** Get the scale factor from the given unit and environment */
   inline static float getFactor(UnitType unit, const Environment& env) {
-    return _unitConversions[static_cast<i8>(unit)](env);
+    // The table holds one conversion per named unit, but UnitType::none is -1
+    // and a unit cast in from outside the enum can be any i8, so indexing by
+    // the raw value reads before or past the table and then calls whatever
+    // bytes happen to be there as a std::function -- the fault lands at that
+    // call, far from the unit that caused it. \above, \abovewithdelims and
+    // \kern already reject a missing dimension while parsing; this is the
+    // backstop under them for every other route a unit takes into a SpaceAtom.
+    // A unit that names no conversion contributes no space, which is what
+    // \raisebox already does for none.
+    const i32 index = static_cast<i8>(unit);
+    if (index < 0 || index >= _unitConversionsCount) return 0.f;
+    return _unitConversions[index](env);
   }
 
   inline static float getSize(UnitType unit, float size, const Environment& env) {
-    return _unitConversions[static_cast<i8>(unit)](env) * size;
+    return getFactor(unit, env) * size;
   }
 
   sptr<Box> createBox(Environment& env) override;
