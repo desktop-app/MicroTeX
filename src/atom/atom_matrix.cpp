@@ -427,7 +427,6 @@ void MatrixAtom::applyCell(WrapperBox& box, int i, int j) {
 }
 
 sptr<Box> MatrixAtom::createBox(Environment& e) {
-  Environment& env = e;
   const int rows = _matrix->rows();
   const int cols = _matrix->cols();
 
@@ -447,15 +446,23 @@ sptr<Box> MatrixAtom::createBox(Environment& e) {
   for (int i = 0; i < rows; i++) boxarr[i] = new sptr<Box>[cols]();
 
   float matW = 0;
-  float drt = env.getTeXFont()->getDefaultRuleThickness(env.getStyle());
+  float drt = e.getTeXFont()->getDefaultRuleThickness(e.getStyle());
 
+  // Assigning *(e.copy()) into e destroyed the object being copied halfway
+  // through: copy() parks the only owning reference in e's own _copy member,
+  // and the implicit assignment reaches _copy before the seven shared pointers
+  // declared after it, so it dropped that reference and then read the freed
+  // environment for the rest of the copy. It also left the caller's own
+  // environment in script style with its text width and interline reset, which
+  // no caller expects -- the smaller style belongs to this matrix alone.
+  // Keep the smaller environment in a local owning pointer instead and build
+  // every cell against that.
+  sptr<Environment> smallEnv;
   if (_matType == MatrixType::smallMatrix) {
-    env = *(e.copy());
-    env.setStyle(TexStyle::script);
-  } /* else if (_matType == MatrixType::matrix) {
-    env = *(e.copy());
-    env.setStyle(STYLE_TEXT);
-  }*/
+    smallEnv = e.copy();
+    smallEnv->setStyle(TexStyle::script);
+  }
+  Environment& env = smallEnv == nullptr ? e : *smallEnv;
 
   // multi-column & multi-row atoms
   vector<sptr<Atom>> listMultiCol;
