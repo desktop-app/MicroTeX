@@ -53,6 +53,7 @@ public:
 };
 
 class VlineAtom;
+class MulticolumnAtom;
 
 enum class MatrixType : i8 {
   array,
@@ -83,12 +84,16 @@ private:
 
   void parsePositions(std::wstring opt, std::vector<Alignment>& lpos);
 
+  // Number of columns the given multi-column cell really covers, clamped to
+  // the columns that exist to the right of `j`.
+  int multicolumnSpan(const MulticolumnAtom* mca, int j) const;
+
   sptr<Box> generateMulticolumn(
     Environment& env,
     const sptr<Box>& b,
     const float* hsep,
     const float* colWidth,
-    int i,
+    MulticolumnAtom* mca,
     int j
   );
 

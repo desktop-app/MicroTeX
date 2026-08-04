@@ -5,6 +5,7 @@
 #include "core/core.h"
 #include "core/formula.h"
 #include "core/macro.h"
+#include "core/parser.h"
 #include "fonts/fonts.h"
 #if CLATEX_CXX17 && !defined(__APPLE__)
 #include <filesystem>
@@ -171,6 +172,7 @@ TeXRender* LaTeX::parse(const wstring& latex, int width, float textSize, float l
   RowAtom::_breakEveywhere = false;
   DefaultTeXFont::resetMathSizes();
   resetBoxBudget();
+  resetExpansionWork();
 
   bool lined = true;
   if (startswith(latex, L"$$") || startswith(latex, L"\\[")) {

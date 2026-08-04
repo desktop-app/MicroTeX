@@ -28,6 +28,41 @@ namespace {
 constexpr int kMaxParseDepth = 250;
 thread_local int gParseDepth = 0;
 
+// A macro or environment expansion splices its replacement back into _latex
+// and rewinds the cursor onto it, so a self-referential definition expands
+// again and again. Two bounds are needed, because either one alone leaves the
+// other side unbounded:
+//  - how much text an expansion may produce, or a definition that grows the
+//    formula every round (\newcommand{\x}{\x\x}) runs out of memory first;
+//  - the accumulated cost of the expansions, since each one re-copies and
+//    re-scans the text around it and therefore costs a share of the current
+//    formula length. A count limit alone does not bound that product:
+//    \newenvironment{a}{\begin{a}...}{} rewrites the same 400 characters
+//    forever, staying inside any count while every round rescans the whole
+//    formula, and a 450-character message froze the parse for minutes.
+// Real formulas are a few hundred characters and expand a handful of times,
+// which is a millionth of the work limit.
+constexpr int kMaxExpansions = 10000;
+constexpr int kMaxExpandedLength = 64 * 1024;
+constexpr int64_t kMaxExpansionWork = 32 * 1024 * 1024;
+// thread_local because formulas may be parsed on worker threads concurrently.
+// Deliberately not reset on throw: parsing swallows ex_parse in several places
+// (partial mode, per-argument sub-formulas), so a self-restarting budget would
+// not bound anything.
+thread_local int64_t gExpansionWork = 0;
+
+// Charged before an expansion runs, not after: the cost being bounded is the
+// scanning and copying the expansion is about to do, and once the budget is
+// spent every further call must fail before paying it again. Partial mode
+// swallows the throw, so an expansion that only failed afterwards kept doing
+// the full work on every turn.
+void countExpansion(int length) {
+  gExpansionWork += length;
+  if (gExpansionWork > kMaxExpansionWork) {
+    throw ex_parse("Formula expands too much!");
+  }
+}
+
 struct ParseDepthGuard {
   ParseDepthGuard() {
     if (++gParseDepth > kMaxParseDepth) {
@@ -38,6 +73,12 @@ struct ParseDepthGuard {
   ~ParseDepthGuard() { --gParseDepth; }
 };
 }  // namespace
+
+namespace tex {
+void resetExpansionWork() {
+  gExpansionWork = 0;
+}
+}  // namespace tex
 
 const wchar_t TeXParser::ESCAPE = '\\';
 const wchar_t TeXParser::L_GROUP = '{';
@@ -565,13 +606,16 @@ sptr<Atom> TeXParser::processCommands(const wstring& cmd, MacroInfo* mac) {
     // Same self-reference guard as inflateNewCmd: insert() rewinds the parse
     // position to the replacement, so a macro that expands to itself would
     // loop here forever once preprocess() has given up on it.
-    static constexpr int kMaxExpansions = 10000;
     if (++_expansions > kMaxExpansions) {
       throw ex_parse("Too many macro expansions!");
     }
+    countExpansion(_len);
     // The last value in "args" is the replacement string
     auto ret = mac->invoke(*this, args);
     insert(_spos, _pos, args.back());
+    if (_len > kMaxExpandedLength) {
+      throw ex_parse("Formula expands too much!");
+    }
     return ret;
   }
 
@@ -773,10 +817,10 @@ void TeXParser::inflateNewCmd(wstring& cmd, Args& args, int& pos) {
   // name and rewinds, so preprocess() would inflate it forever. Bound the
   // total number of inflations per preprocess pass; real formulas use only a
   // handful. In partial mode this is swallowed like any other parse error.
-  static constexpr int kMaxExpansions = 10000;
   if (++_expansions > kMaxExpansions) {
     throw ex_parse("Too many macro expansions!");
   }
+  countExpansion(_len);
   // The macro must exists
   auto mac = MacroInfo::get(cmd);
   getOptsArgs(mac->_argc, mac->_posOpts, args);
@@ -791,9 +835,20 @@ void TeXParser::inflateNewCmd(wstring& cmd, Args& args, int& pos) {
   }
   _len = _latex.length();
   _pos = pos;
+  if (_len > kMaxExpandedLength) {
+    throw ex_parse("Formula expands too much!");
+  }
 }
 
 void TeXParser::inflateEnv(wstring& cmd, Args& args, int& pos) {
+  // An environment whose begin-definition opens the same environment
+  // (\newenvironment{a}{\begin{a}...}{}) re-inserts \begin{a} and rewinds
+  // exactly the way a self-referential macro does, so it needs the same two
+  // bounds -- on the number of expansions and on the text they may produce.
+  if (++_expansions > kMaxExpansions) {
+    throw ex_parse("Too many macro expansions!");
+  }
+  countExpansion(_len);
   getOptsArgs(1, 0, args);
   wstring env = args[1] + L"@env";
   auto mac = MacroInfo::get(env);
@@ -814,6 +869,9 @@ void TeXParser::inflateEnv(wstring& cmd, Args& args, int& pos) {
   _latex.replace(pos, _pos - pos, expr);
   _len = _latex.length();
   _pos = pos;
+  if (_len > kMaxExpandedLength) {
+    throw ex_parse("Formula expands too much!");
+  }
 }
 
 void TeXParser::preprocess() {
@@ -948,7 +1006,10 @@ void TeXParser::parse() {
         break;
       case L_GROUP: {
         auto atom = getArgument();
-        if (atom != nullptr) atom->_type = AtomType::ordinary;
+        if (atom != nullptr && atom->_type != AtomType::ordinary) {
+          atom = privateCopy(atom);
+          atom->_type = AtomType::ordinary;
+        }
         _formula->add(atom);
       }
         break;

@@ -695,13 +695,15 @@ inline macro(gatheredATATenv) {
 }
 
 inline macro(shoveright) {
-  auto a = Formula(tp, args[1])._root;
+  auto a = privateCopy(Formula(tp, args[1])._root);
+  if (a == nullptr) return a;
   a->_alignment = Alignment::right;
   return a;
 }
 
 inline macro(shoveleft) {
-  auto a = Formula(tp, args[1])._root;
+  auto a = privateCopy(Formula(tp, args[1])._root);
+  if (a == nullptr) return a;
   a->_alignment = Alignment::left;
   return a;
 }

@@ -21,6 +21,10 @@ class Formula;
 
 class MacroInfo;
 
+// Reset the per-formula expansion budget shared by every parser working on
+// one formula. Called once before each top-level parse.
+void resetExpansionWork();
+
 /** This class implements a parser for latex formulas */
 class TeXParser {
 private:
@@ -29,9 +33,10 @@ private:
   int _line, _col;
   int _group;
   int _atIsLetter;
-  // Number of \newcommand-style macro inflations done so far in this parser's
-  // preprocess pass; bounded to stop self-referential macros (e.g.
-  // \newcommand{\x}{\x}\x) from looping forever. See inflateNewCmd.
+  // Number of macro and environment inflations done so far in this parser's
+  // preprocess pass; bounded to stop self-referential definitions (e.g.
+  // \newcommand{\x}{\x}\x, \newenvironment{a}{\begin{a}}{}) from looping
+  // forever. See inflateNewCmd and inflateEnv.
   int _expansions = 0;
   bool _insertion;
   bool _arrayMode;

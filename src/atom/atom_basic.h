@@ -376,7 +376,10 @@ public:
   }
 
   sptr<Atom> getBase() {
-    _atom->_limitsType = _limitsType;
+    if (_atom != nullptr && _atom->_limitsType != _limitsType) {
+      _atom = privateCopy(_atom);
+      _atom->_limitsType = _limitsType;
+    }
     return _atom;
   }
 

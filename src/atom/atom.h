@@ -93,6 +93,22 @@ public:
 #endif
 };
 
+/**
+ * Take a copy of an atom before overriding one of its properties.
+ *
+ * Atoms are not always private to the formula holding them: SymbolAtom::get()
+ * and Formula::get() hand out entries of process-wide caches that outlive
+ * every formula. Writing a type, an alignment or a limits mode straight into
+ * such an atom therefore changes how every later formula in the process
+ * renders -- "x{+}y" turned the shared "+" into an ordinary atom for good, and
+ * every formula parsed afterwards lost its binary-operator spacing. Since a
+ * caller cannot tell a cached atom from a freshly built one, anything that
+ * overrides a property works on its own copy instead.
+ */
+[[nodiscard]] inline sptr<Atom> privateCopy(const sptr<Atom>& atom) {
+  return (atom == nullptr) ? nullptr : atom->clone();
+}
+
 }  // namespace tex
 
 #endif  // ATOM_H_INCLUDED

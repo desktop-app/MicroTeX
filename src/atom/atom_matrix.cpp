@@ -43,9 +43,26 @@ void MatrixAtom::parsePositions(wstring opt, vector<Alignment>& lpos) {
   // away. Each loop turn produces at most one column or one expansion step,
   // so a step cap bounds them all. Real specs need only a handful of turns.
   constexpr int kMaxColumnSpecSteps = 100000;
+  // Bounding the number of turns is not enough on its own: a turn splices its
+  // expansion into the spec and rewinds, and both the splice and the lookup
+  // below cost time proportional to what the spec has grown to. A definition
+  // that grows it every turn (\newcolumntype{A}{AA}) therefore pays a rising
+  // price for each of the allowed turns and never finishes. Cap the expanded
+  // length as well; it is two orders of magnitude past any real spec, and a
+  // spec this long describes more columns than can be laid out anyway.
+  constexpr int kMaxColumnSpecLength = 10000;
+  // The user-defined column types are matched longest-first, so nothing longer
+  // than the longest registered name can match. Without that bound the scan
+  // built and hashed every remaining suffix of the spec for each unrecognised
+  // character -- cubic in the spec length, which froze the parse for tens of
+  // seconds on \begin{array}{QQQ...Q}. With no types registered it is skipped.
+  size_t longestColumnType = 0;
+  for (const auto& r : _colspeReplacement) {
+    longestColumnType = max(longestColumnType, r.first.length());
+  }
   int steps = 0;
   while (pos < len) {
-    if (++steps > kMaxColumnSpecSteps)
+    if (++steps > kMaxColumnSpecSteps || len > kMaxColumnSpecLength)
       throw ex_parse("Column specification is too complex!");
     ch = opt[pos];
     switch (ch) {
@@ -124,7 +141,7 @@ void MatrixAtom::parsePositions(wstring opt, vector<Alignment>& lpos) {
       case '\t':
         break;
       default: {
-        int spos = len + 1;
+        int spos = pos + int(min(size_t(len - pos), longestColumnType)) + 1;
         bool hasrep = false;
         while (--spos > pos) {
           auto it = _colspeReplacement.find(opt.substr(pos, spos - pos));
@@ -267,7 +284,8 @@ void MatrixAtom::recalculateLine(
 ) {
   const size_t s = multiRows.size();
   for (size_t i = 0; i < s; i++) {
-    auto* m = (MultiRowAtom*) multiRows[i].get();
+    auto* m = dynamic_cast<MultiRowAtom*>(multiRows[i].get());
+    if (m == nullptr) continue;
     const int r = m->_i;
     const int c = m->_j;
     int n = m->_n;
@@ -276,6 +294,15 @@ void MatrixAtom::recalculateLine(
     if (n < 0) {
       // Across from bottom to top
       int j = r;
+      // The span has to end on a row that holds cells. Deriving that row from
+      // the loop counter alone lands on a rule row when the scan stops at one
+      // (\begin{array}{cc}\hline\hline\multirow{-3}{*}{x}&b\end{array} breaks
+      // out at row 0 and pointed at row 1, a rule). The swap below then left
+      // a rule box over a cell holding the \multirow atom, and the row loop
+      // in createBox reinterpreted that atom as an HlineAtom. Remember the
+      // topmost row actually spanned instead; without rules in the way it is
+      // the same row the counter produced.
+      int top = r;
       for (; j >= 0 && j > r + n; j--) {
         if (boxarr[j][0]->_type == AtomType::hline) {
           if (j == 0) break;
@@ -283,13 +310,14 @@ void MatrixAtom::recalculateLine(
           n--;
         } else {
           skipped++;
+          top = j;
           h += height[j] + depth[j] + vspace;
         }
       }
-      m->_i = ++j;
+      m->_i = top;
       auto tmp = boxarr[r][c];
-      boxarr[r][c] = boxarr[j][c];
-      boxarr[j][c] = tmp;
+      boxarr[r][c] = boxarr[top][c];
+      boxarr[top][c] = tmp;
     } else {
       // Across from top to bottom
       for (int j = r; j < r + n && j < rows; j++) {
@@ -308,7 +336,7 @@ void MatrixAtom::recalculateLine(
     const float bh = b->_height + b->_depth + vspace;
     if (h > bh) {
       b->_height = (h - bh + vspace) / 2.f;
-    } else if (h < bh) {
+    } else if (h < bh && skipped > 0) {
       const float ex = (bh - h) / skipped / 2.f;
       // Clamp the span end to the real row count. A multirow whose requested
       // span exceeds the rows below it (e.g. \multirow{20}{*}{x} in a
@@ -329,17 +357,23 @@ void MatrixAtom::recalculateLine(
   }
 }
 
+int MatrixAtom::multicolumnSpan(const MulticolumnAtom* mca, int j) const {
+  // A cell can ask for more columns than the matrix has left: the widths and
+  // separators it sums live in arrays sized by the column count, so a span
+  // reaching past the last column reads beyond them.
+  return max(1, min(mca->skipped(), _matrix->cols() - j));
+}
+
 sptr<Box> MatrixAtom::generateMulticolumn(
   Environment& env,
   const sptr<Box>& b,
   const float* hsep,
   const float* colWidth,
-  int i,
+  MulticolumnAtom* mca,
   int j
 ) {
   float w = 0;
-  auto* mca = (MulticolumnAtom*) (_matrix->_array[i][j].get());
-  int k, n = mca->skipped();
+  int k, n = multicolumnSpan(mca, j);
   for (k = j; k < j + n - 1; k++) {
     w += colWidth[k] + hsep[k + 1];
     auto it = _vlines.find(k + 1);
@@ -484,21 +518,26 @@ sptr<Box> MatrixAtom::createBox(Environment& e) {
         boxarr[i][j]->_type = AtomType::interText;
       }
 
-      if (boxarr[i][j]->_type != AtomType::multiRow) {
+      auto* mra = (boxarr[i][j]->_type == AtomType::multiRow)
+                  ? dynamic_cast<MultiRowAtom*>(atom.get())
+                  : nullptr;
+      auto* mca = (boxarr[i][j]->_type == AtomType::multiColumn)
+                  ? dynamic_cast<MulticolumnAtom*>(atom.get())
+                  : nullptr;
+
+      if (mra == nullptr) {
         // Find the highest line (row)
         lineDepth[i] = max(boxarr[i][j]->_depth, lineDepth[i]);
         lineHeight[i] = max(boxarr[i][j]->_height, lineHeight[i]);
       } else {
-        auto* mra = (MultiRowAtom*) atom.get();
         mra->setRowColumn(i, j);
         listMultiRow.push_back(atom);
       }
 
-      if (boxarr[i][j]->_type != AtomType::multiColumn) {
+      if (mca == nullptr) {
         // Find the widest column
         colWidth[j] = max(boxarr[i][j]->_width, colWidth[j]);
       } else {
-        auto* mca = (MulticolumnAtom*) atom.get();
         mca->setRowColumn(i, j);
         listMultiCol.push_back(atom);
       }
@@ -512,7 +551,8 @@ sptr<Box> MatrixAtom::createBox(Environment& e) {
 
   for (auto& i : listMultiCol) {
     auto* multi = (MulticolumnAtom*) i.get();
-    const int c = multi->col(), r = multi->row(), n = multi->skipped();
+    const int c = multi->col(), r = multi->row();
+    const int n = multicolumnSpan(multi, c);
     float w = 0;
     int j = 0;
     for (j = c; j < c + n - 1; j++) w += colWidth[j] + Hsep[j + 1];
@@ -543,8 +583,31 @@ sptr<Box> MatrixAtom::createBox(Environment& e) {
 
   for (int i = 0; i < rows; i++) {
     auto hb = sptrOf<HBox>();
+    const auto& cells = _matrix->_array[i];
     for (int j = 0; j < cols; j++) {
-      switch (boxarr[i][j]->_type) {
+      // The box type alone does not tell which atom produced this cell.
+      // recalculateLine() moves boxes between rows to lay out \multirow
+      // spans while the atoms stay where they were parsed, and a row shorter
+      // than the widest one has no atom at every column at all. Both cases
+      // used to be treated as guarantees, so a moved multi-column or rule box
+      // reinterpreted an unrelated atom -- \begin{array}{cc}\multicolumn{2}
+      // {c}{y}\\\multirow{-2}{*}{x}&b\end{array} read a \multirow atom as a
+      // MulticolumnAtom. Resolve the atom once, and fall back to the plain
+      // cell path whenever it does not match the type the box claims.
+      const auto cell = (j < (int) cells.size()) ? cells[j] : nullptr;
+      auto type = boxarr[i][j]->_type;
+      auto* mca = (type == AtomType::multiColumn)
+                  ? dynamic_cast<MulticolumnAtom*>(cell.get())
+                  : nullptr;
+      auto* hla = (type == AtomType::hline)
+                  ? dynamic_cast<HlineAtom*>(cell.get())
+                  : nullptr;
+      if ((type == AtomType::multiColumn && mca == nullptr)
+          || (type == AtomType::hline && hla == nullptr)) {
+        type = AtomType::none;
+      }
+
+      switch (type) {
         case AtomType::none:
         case AtomType::multiColumn: {
           if (j == 0) {
@@ -563,16 +626,15 @@ sptr<Box> MatrixAtom::createBox(Environment& e) {
           WrapperBox* wb = nullptr;
           int tj = j;
           float l = j == 0 ? Hsep[j] : Hsep[j] / 2;
-          if (boxarr[i][j]->_type == AtomType::none) {
+          if (mca == nullptr) {
             wb = new WrapperBox(
               boxarr[i][j], colWidth[j], lineHeight[i], lineDepth[i], _position[j]  //
             );
           } else {
-            auto b = generateMulticolumn(env, boxarr[i][j], Hsep, colWidth, i, j);
-            auto* matom = (MulticolumnAtom*) _matrix->_array[i][j].get();
-            j += matom->skipped() - 1;
+            auto b = generateMulticolumn(env, boxarr[i][j], Hsep, colWidth, mca, j);
+            j += multicolumnSpan(mca, j) - 1;
             wb = new WrapperBox(b, b->_width, lineHeight[i], lineDepth[i], Alignment::left);
-            isLastVline = matom->hasRightVline();
+            isLastVline = mca->hasRightVline();
           }
           float r = j == cols - 1 ? Hsep[j + 1] : Hsep[j + 1] / 2;
           wb->addInsets(l, Vspace, r, Vspace);
@@ -601,14 +663,17 @@ sptr<Box> MatrixAtom::createBox(Environment& e) {
           break;
 
         case AtomType::hline: {
-          auto* at = (HlineAtom*) _matrix->_array[i][j].get();
-          at->setColor(LINE_COLOR);
-          at->setWidth(matW);
-          if (i >= 1 && dynamic_cast<HlineAtom*>(_matrix->_array[i - 1][j].get()) != nullptr) {
-            hb->add(sptrOf<StrutBox>(0.f, 2 * drt, 0.f, 0.f));
+          hla->setColor(LINE_COLOR);
+          hla->setWidth(matW);
+          if (i >= 1) {
+            const auto& above = _matrix->_array[i - 1];
+            if (j < (int) above.size()
+                && dynamic_cast<HlineAtom*>(above[j].get()) != nullptr) {
+              hb->add(sptrOf<StrutBox>(0.f, 2 * drt, 0.f, 0.f));
+            }
           }
 
-          hb->add(at->createBox(env));
+          hb->add(hla->createBox(env));
           j = cols;
         }
           break;
@@ -746,27 +811,33 @@ sptr<Box> MultlineAtom::createBox(Environment& env) {
   if (tw == POS_INF || _lineType == MultiLineType::gathered)
     return MatrixAtom(_isPartial, _column, L"").createBox(env);
 
+  const int rows = _column->rows();
   auto* vb = new VBox();
-  auto atom = _column->_array[0][0];
-  Alignment alignment = _lineType == MultiLineType::gather ? Alignment::center : Alignment::left;
-  if (atom->_alignment != Alignment::none) alignment = atom->_alignment;
-
-  vb->add(sptrOf<HBox>(atom->createBox(env), tw, alignment));
   auto Vsep = _vsep_in.createBox(env);
-  for (size_t i = 1; i < _column->rows() - 1; i++) {
-    atom = _column->_array[i][0];
-    alignment = Alignment::center;
-    if (atom->_alignment != Alignment::none) alignment = atom->_alignment;
-    vb->add(Vsep);
-    vb->add(sptrOf<HBox>(atom->createBox(env), tw, alignment));
-  }
+  const bool gather = (_lineType == MultiLineType::gather);
+  for (int i = 0; i < rows; i++) {
+    // A line can carry no atom at all: \begin{gather}\\\end{gather} parses to
+    // rows whose only cell is null, and every read of that cell below used to
+    // dereference it. Row lengths are not guaranteed to be one either, so take
+    // the cell only when it is really there and render an empty line if not.
+    const auto& row = _column->_array[i];
+    const auto atom = row.empty() ? nullptr : row[0];
 
-  if (_column->rows() > 1) {
-    atom = _column->_array[_column->rows() - 1][0];
-    alignment = _lineType == MultiLineType::gather ? Alignment::center : Alignment::right;
-    if (atom->_alignment != Alignment::none) alignment = atom->_alignment;
-    vb->add(Vsep);
-    vb->add(sptrOf<HBox>(atom->createBox(env), tw, alignment));
+    auto alignment = Alignment::center;
+    if (i == 0) {
+      alignment = gather ? Alignment::center : Alignment::left;
+    } else if (i == rows - 1) {
+      alignment = gather ? Alignment::center : Alignment::right;
+    }
+    if (atom != nullptr && atom->_alignment != Alignment::none) {
+      alignment = atom->_alignment;
+    }
+
+    if (i > 0) vb->add(Vsep);
+    auto b = (atom == nullptr)
+             ? sptr<Box>(sptrOf<StrutBox>(0.f, 0.f, 0.f, 0.f))
+             : atom->createBox(env);
+    vb->add(sptrOf<HBox>(b, tw, alignment));
   }
 
   float h = vb->_height + vb->_depth;
