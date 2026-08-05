@@ -66,9 +66,18 @@ sptr<Box> Glue::createBox(const Environment& env) const {
 // Clamping here keeps a bad value from reading past either array even if a
 // caller lets one through.
 int Glue::indexOf(AtomType ltype, AtomType rtype, const Environment& env) {
-  // types > INNER are considered of type ORD for glue calculations
-  AtomType l = (ltype > AtomType::inner ? AtomType::ordinary : ltype);
-  AtomType r = (rtype > AtomType::inner ? AtomType::ordinary : rtype);
+  // types > INNER are considered of type ORD for glue calculations, and so is
+  // anything below ORD. Only clamping from above left AtomType::none (= -1)
+  // to pass through, and static_cast<u8> then turns it into 255 -- an index
+  // thousands of bytes past _table, the same shape as the unit-conversion
+  // lookup that indexed at -1. No atom reports `none` today, but nothing
+  // states that invariant and Box::_type defaults to it, so bound the index
+  // where the lookup happens rather than relying on every caller.
+  const auto clamp = [](AtomType t) {
+    return (t > AtomType::inner || t < AtomType::ordinary) ? AtomType::ordinary : t;
+  };
+  AtomType l = clamp(ltype);
+  AtomType r = clamp(rtype);
   const int style = static_cast<i8>(env.getStyle()) / 2;
   const int k = (style < 0) ? 0 : (style >= STYLE_COUNT ? STYLE_COUNT - 1 : style);
   return _table[static_cast<u8>(l)][static_cast<u8>(r)][k] - '0';
@@ -93,7 +102,10 @@ sptr<Box> Glue::get(SpaceType skipType, const Environment& env) {
 }
 
 float Glue::getSpace(AtomType ltype, AtomType rtype, const Environment& env) {
-  int i = indexOf(ltype, rtype, env);
+  const int i = indexOf(ltype, rtype, env);
+  // Same guard the box-building overload above already has: the table entry
+  // is data, so a bad one must not index _glueTypes.
+  if (i < 0 || i >= GLUE_TYPE_COUNT) return 0.f;
   const Glue& glueType = _glueTypes[i];
   return glueType._space * glueType.getFactor(env);
 }

@@ -232,6 +232,11 @@ void ReflectBox::draw(Graphics2D& g2, float x, float y) {
 /************************************** rotate box implementation *********************************/
 
 void RotateBox::init(const sptr<Box>& b, float angle, float x, float y) {
+  // Guarded like ScaleBox::init above. \rotatebox takes its angle straight
+  // from the formula, and a literal too large for a float ("\rotatebox{1e40}")
+  // arrives as infinity; sin/cos of that is NaN, which then spreads into the
+  // width and depth below and out through every box built around this one.
+  if (isnan(angle) || isinf(angle)) angle = 0;
   _angle = angle * PI / 180;
   _height = b->_height;
   _depth = b->_depth;

@@ -308,6 +308,12 @@ public:
   /** Define a color with given name */
   static void defineColor(const std::string& name, color c);
 
+  /**
+   * Restore the built-in palette, so that a \definecolor in one formula
+   * cannot change what a color name means in every formula after it.
+   */
+  static void resetColors();
+
   __decl_clone(ColorAtom)
 };
 

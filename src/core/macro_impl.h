@@ -591,6 +591,12 @@ inline macro(hdotsfor) {
     throw ex_parse("Bad column span in hdotsfor!");
   float f = 1.f;
   if (!args[2].empty()) valueof(args[2], f);
+  // The optional coefficient scales the gap between the dots, so it ends up
+  // dividing the span width to decide how many dots fit. Every other length
+  // in a formula is cleared of non-finite values by SpaceAtom::getLength;
+  // this one is read straight off the argument, and infinity here made that
+  // count NaN, whose conversion to int is undefined.
+  if (!std::isfinite(f)) f = 1.f;
   tp.addAtom(sptrOf<HdotsforAtom>(n, f));
   ((ArrayFormula*) tp._formula)->addCol(n);
   return nullptr;

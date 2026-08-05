@@ -31,7 +31,7 @@ pair<UnitType, float> SpaceAtom::getLength(const string& lgth) {
   if (lgth.empty()) return {UnitType::pixel, 0.f};
 
   size_t i = 0;
-  for (; i < lgth.size() && !isalpha(lgth[i]); i++);
+  for (; i < lgth.size() && !isAsciiAlpha(static_cast<unsigned char>(lgth[i])); i++);
   float f = 0;
   valueof(lgth.substr(0, i), f);
   // A literal too large for a float leaves infinity here, which then spreads

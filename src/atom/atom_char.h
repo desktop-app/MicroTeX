@@ -102,7 +102,8 @@ public:
    * @param type symbol type constant
    * @param del whether the symbol is a delimiter
    */
-  SymbolAtom(const std::string& name, AtomType type, bool del) noexcept;
+  // Not noexcept: the name is copied into a std::string, which allocates.
+  SymbolAtom(const std::string& name, AtomType type, bool del);
 
   inline SymbolAtom& setUnicode(wchar_t c) {
     _unicode = c;

@@ -16,7 +16,7 @@ sptr<Box> FixedCharAtom::createBox(Environment& env) {
   return sptrOf<CharBox>(c);
 }
 
-SymbolAtom::SymbolAtom(const string& name, AtomType type, bool del) noexcept: _unicode(0) {
+SymbolAtom::SymbolAtom(const string& name, AtomType type, bool del) : _unicode(0) {
   _name = name;
   _type = type;
   if (type == AtomType::bigOperator) _limitsType = LimitsType::normal;
@@ -28,10 +28,15 @@ sptr<Box> SymbolAtom::createBox(Environment& env) {
   TexStyle style = env.getStyle();
   Char c = tf.getChar(_name, style);
   sptr<Box> cb = sptrOf<CharBox>(c);
-  if (env.getSmallCap() && _unicode != 0 && islower(_unicode)) {
+  if (env.getSmallCap() && _unicode != 0 && isAsciiLower(_unicode)) {
     // find if exists in mapping
-    auto it = Formula::_symbolTextMappings.find(toupper(_unicode));
-    if (it != Formula::_symbolFormulaMappings.end()) {
+    auto it = Formula::_symbolTextMappings.find(asciiToUpper(_unicode));
+    // Compared against the map the iterator actually came from. Testing it
+    // against _symbolFormulaMappings.end() -- a different container -- is
+    // undefined and in practice never equal, so a lookup that missed fell
+    // into the body anyway and read _symbolTextMappings.end()->second, a
+    // string fabricated from the tree header, which getChar then walked.
+    if (it != Formula::_symbolTextMappings.end()) {
       const string& name = it->second;
       try {
         auto cx = sptrOf<CharBox>(tf.getChar(name, style));
@@ -78,7 +83,7 @@ sptr<SymbolAtom> SymbolAtom::get(const string& name) {
 Char CharAtom::getChar(TeXFont& tf, TexStyle style, bool smallCap) {
   wchar_t chr = _c;
   if (smallCap) {
-    if (islower(_c)) chr = toupper(_c);
+    if (isAsciiLower(_c)) chr = asciiToUpper(_c);
   }
   if (_textStyle.empty()) return tf.getDefaultChar(chr, style);
   return tf.getChar(chr, _textStyle, style);
@@ -97,7 +102,7 @@ sptr<Box> CharAtom::createBox(Environment& env) {
   bool smallCap = env.getSmallCap();
   Char ch = getChar(*env.getTeXFont(), env.getStyle(), smallCap);
   sptr<Box> box = sptrOf<CharBox>(ch);
-  if (smallCap && islower(_c)) {
+  if (smallCap && isAsciiLower(_c)) {
     // we have a small capital
     box = sptrOf<ScaleBox>(box, 0.8f, 0.8f);
   }

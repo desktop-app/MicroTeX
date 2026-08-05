@@ -152,9 +152,14 @@ void VRowAtom::setRaise(UnitType unit, float r) {
 }
 
 sptr<Atom> VRowAtom::popLastAtom() {
-  auto x = _elements.back();
-  _elements.pop_back();
-  return x;
+  // Guarded like RowAtom::popLastAtom: back()/pop_back() on an empty vector
+  // is undefined, and nothing about the signature warns a caller off.
+  if (!_elements.empty()) {
+    sptr<Atom> x = _elements.back();
+    _elements.pop_back();
+    return x;
+  }
+  return sptrOf<SpaceAtom>(UnitType::point, 0.f, 0.f, 0.f);
 }
 
 void VRowAtom::add(const sptr<Atom>& el) {
@@ -224,6 +229,16 @@ ColorAtom::ColorAtom(const sptr<Atom>& atom, color bg, color c)
 
 void ColorAtom::defineColor(const string& name, color c) {
   _colors[name] = c;
+}
+
+void ColorAtom::resetColors() {
+  // Unlike the column-type table, this map ships pre-filled and \definecolor
+  // overwrites entries in place -- "\definecolor{red}{rgb}{0,0,0}" in one
+  // formula made \textcolor{red} black in every formula parsed afterwards.
+  // Clearing would take the built-ins with it, so snapshot them instead. The
+  // first call happens before any formula is parsed, so the copy is pristine.
+  static const std::map<std::string, color> builtin = _colors;
+  _colors = builtin;
 }
 
 sptr<Box> ColorAtom::createBox(Environment& env) {

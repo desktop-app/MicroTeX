@@ -7,6 +7,17 @@
 using namespace std;
 using namespace tex;
 
+namespace {
+// AtomType::none is -1 and bitset::operator[] takes a size_t, so indexing by a
+// raw type value turns that into SIZE_MAX. No atom reports `none` today, but
+// nothing states that invariant and Box::_type defaults to it, so bound the
+// index here rather than at every call site.
+inline bool inTypeSet(const bitset<16>& set, AtomType type) {
+  const int i = static_cast<i8>(type);
+  return i >= 0 && i < 16 && set[i];
+}
+}  // namespace
+
 inline bool Dummy::isCharSymbol() const {
   auto* x = dynamic_cast<CharSymbol*>(_atom.get());
   return (x != nullptr);
@@ -28,10 +39,21 @@ void Dummy::changeAtom(const sptr<FixedCharAtom>& atom) {
 }
 
 sptr<Box> Dummy::createBox(Environment& env) {
-  if (_textSymbol) ((CharSymbol*) _atom.get())->markAsTextSymbol();
-  auto box = _atom->createBox(env);
-  if (_textSymbol) ((CharSymbol*) _atom.get())->removeMark();
-  return box;
+  if (!_textSymbol) return _atom->createBox(env);
+  // The mark is set on the wrapped atom, which is usually an entry of the
+  // process-wide symbol cache rather than something private to this formula.
+  // Removing it only on the success path left that shared atom marked for the
+  // rest of the process whenever createBox threw -- and throwing is how an
+  // oversized formula is rejected, so this was reachable -- which then changed
+  // the spacing of that symbol in every formula rendered afterwards.
+  auto* symbol = (CharSymbol*) _atom.get();
+  struct Unmark {
+    CharSymbol* symbol;
+    ~Unmark() { symbol->removeMark(); }
+  };
+  symbol->markAsTextSymbol();
+  Unmark unmark{symbol};
+  return _atom->createBox(env);
 }
 
 inline bool Dummy::isKern() const {
@@ -101,7 +123,7 @@ void RowAtom::add(const sptr<Atom>& atom) {
 void RowAtom::changeToOrd(Dummy* cur, Dummy* prev, Atom* next) {
   AtomType type = cur->leftType();
   if ((type == AtomType::binaryOperator)
-      && ((prev == nullptr || _binSet[static_cast<i8>(prev->rightType())]) || next == nullptr)) {
+      && ((prev == nullptr || inTypeSet(_binSet, prev->rightType())) || next == nullptr)) {
     cur->_type = AtomType::ordinary;
   } else if (next != nullptr && cur->rightType() == AtomType::binaryOperator) {
     AtomType nextType = next->leftType();
@@ -156,7 +178,7 @@ sptr<Box> RowAtom::createBox(Environment& env) {
     while (i < end && atom->rightType() == AtomType::ordinary && atom->isCharSymbol()) {
       auto next = _elements[++i];
       auto* c = dynamic_cast<CharSymbol*>(next.get());
-      if (c != nullptr && _ligKernSet[static_cast<i8>(next->leftType())]) {
+      if (c != nullptr && inTypeSet(_ligKernSet, next->leftType())) {
         atom->markAsTextSymbol();
         auto l = atom->getCharFont(tf);
         auto r = c->getCharFont(tf);
@@ -203,7 +225,7 @@ sptr<Box> RowAtom::createBox(Environment& env) {
         hbox->addBreakPosition(hbox->_children.size());
       } else {
         auto ca = dynamic_cast<CharAtom*>(at.get());
-        if (markAdded || (ca != nullptr && isdigit(ca->getCharacter()))) {
+        if (markAdded || (ca != nullptr && isAsciiDigit(ca->getCharacter()))) {
           hbox->addBreakPosition(hbox->_children.size());
         }
       }

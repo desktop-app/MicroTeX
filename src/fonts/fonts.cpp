@@ -270,6 +270,11 @@ int DefaultTeXFont::getMuFontId() {
 Char DefaultTeXFont::getNextLarger(const Char& c, TexStyle style) {
   auto info = getInfo(c.getFontCode());
   auto ch = info->getNextLarger(c.getChar());
+  // A table miss is reported as nullptr, exactly as getExtension() reports
+  // one. Callers gate on hasNextLarger(), but that is a separate second
+  // lookup of the same key rather than a guarantee about this one, so keep
+  // the char as it is instead of dereferencing the miss.
+  if (ch == nullptr) return c;
   auto newInfo = getInfo(ch->fontId);
   return Char(ch->chr, newInfo->getFont(), ch->fontId, getMetrics(*ch, getSizeFactor(style)));
 }

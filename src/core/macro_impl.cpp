@@ -470,7 +470,7 @@ macro(xml) {
   while ((pos = str.find(L'$')) != wstring::npos) {
     if (pos < str.length() - 1) {
       start = pos;
-      while (++start < str.length() && isalpha(str[start]));
+      while (++start < str.length() && isAsciiAlpha(str[start]));
       wstring key = str.substr(pos + 1, start - pos - 1);
       string x = wide2utf8(key);
       auto it = m.find(x);

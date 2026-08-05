@@ -21,11 +21,23 @@ namespace {
 // instead recurse through getCommandWithArgs() without touching parse() at
 // all. Both sites take a guard against this one counter, so the limit bounds
 // their combined depth -- and with it the depth of the atom tree that
-// createBox() later recurses over. Real formulas nest a few dozen levels at
-// most; the harness overflowed the stack around 1000, so 250 leaves a wide
-// margin while never rejecting legitimate input.
+// createBox() later recurses over.
+//
+// The limit has to leave room for the throw, not just for the descent, and
+// that is what makes it much smaller than it looks like it could be. Reaching
+// a given depth costs far less stack than unwinding from it: measured on
+// Windows, a 1MB stack parses 249 nested groups happily but dies inside the
+// throw the guard raises at 250, and a 512KB stack dies in the throw at 60.
+// The old limit of 250 therefore never actually protected anything -- the
+// process aborted, uncatchably, at the exact depth the guard was meant to
+// reject, on "{" repeated 250 times or "x" followed by 250 "^{". 48 stays
+// clear of the throw budget on a 512KB stack (the smallest a formula is
+// likely to be parsed on -- secondary threads on macOS) and is still three
+// times deeper than the deepest formula in the render corpus, whose most
+// nested cases (\cfrac chains, stacked \sqrt, Maxwell's equations) sit under
+// 16. Raising it again means re-measuring the throw, not just the descent.
 // thread_local because formulas may be parsed on worker threads concurrently.
-constexpr int kMaxParseDepth = 250;
+constexpr int kMaxParseDepth = 48;
 thread_local int gParseDepth = 0;
 
 // A macro or environment expansion splices its replacement back into _latex
@@ -176,6 +188,12 @@ void TeXParser::reset(const wstring& latex) {
   _latex = latex;
   _len = latex.length();
   _formula->_root = nullptr;
+  // Only \left...\right consumes this list, from its own local formula, so
+  // a \middle written outside one is parked here and never taken. The shared
+  // LaTeX::_formula is reused for every parse, so without clearing it those
+  // atoms -- and the whole subtree each one holds -- accumulated for the
+  // lifetime of the process.
+  _formula->_middle.clear();
   _pos = 0;
   _spos = 0;
   _line = 0;
@@ -557,12 +575,12 @@ bool TeXParser::isValidName(const wstring& com) const {
   int l = com.length();
   while (p < l) {
     c = com[p];
-    if (!isalpha(c) && (_atIsLetter == 0 || c != '@'))
+    if (!isAsciiAlpha(c) && (_atIsLetter == 0 || c != '@'))
       break;
     p++;
   }
 
-  return isalpha(c);
+  return isAsciiAlpha(c);
 }
 
 sptr<Atom> TeXParser::processEscape() {
@@ -693,57 +711,72 @@ sptr<Atom> TeXParser::getScripts(wchar_t first) {
 }
 
 sptr<Atom> TeXParser::getArgument() {
-  skipWhiteSpace();
-  wchar_t ch;
-  if (_pos < _len) ch = _latex[_pos];
-  else return sptrOf<EmptyAtom>();
+  // Looped rather than recursive. Expanding a user macro splices the
+  // replacement back into _latex and rewinds the cursor onto it, so the
+  // argument has to be read again from the top -- and a self-referential
+  // definition (\newcommand{\a}{\a}) makes that happen over and over. Doing
+  // it by calling getArgument() again grew the native stack once per
+  // expansion, and nothing bounded that growth: the parse-depth guard is
+  // taken only in parse() and getCommandWithArgs(), neither of which is on
+  // this path, leaving only kMaxExpansions -- about three times more turns
+  // than a 1MB stack survives. The overflow was a hardware fault, not an
+  // exception, so the caller's catch could not contain it and the process
+  // died on "\newcommand{\a}{\a}\frac{x^\a}{y}". The loop keeps the same
+  // one-frame cost however many times the argument is re-read, while
+  // kMaxExpansions still bounds the number of turns.
+  for (;;) {
+    skipWhiteSpace();
+    wchar_t ch;
+    if (_pos < _len) ch = _latex[_pos];
+    else return sptrOf<EmptyAtom>();
 
-  if (ch == L_GROUP) {
-    Formula tf;
-    Formula* tmp = _formula;
-    _formula = &tf;
-    // The group is parsed into a plain Formula, so row commands (\\, \cr)
-    // inside it must not see the enclosing array mode: addRow would
-    // downcast the temporary to ArrayFormula (e.g. \\int^{\\infty}, where
-    // the first \\ wraps the rest in an ArrayFormula and the second is
-    // parsed inside the superscript group).
-    const bool arrayMode = _arrayMode;
-    _arrayMode = false;
-    _pos++;
-    _group++;
-    try {
-      parse();
-    } catch (...) {
-      // Restore before unwinding: leaving _formula pointing at the dead
-      // stack temporary poisons every later parse made with this parser
-      // (the shared LaTeX::_formula one lives forever), turning the next
-      // tp._formula dereference into a use-after-free.
+    if (ch == L_GROUP) {
+      Formula tf;
+      Formula* tmp = _formula;
+      _formula = &tf;
+      // The group is parsed into a plain Formula, so row commands (\\, \cr)
+      // inside it must not see the enclosing array mode: addRow would
+      // downcast the temporary to ArrayFormula (e.g. \\int^{\\infty}, where
+      // the first \\ wraps the rest in an ArrayFormula and the second is
+      // parsed inside the superscript group).
+      const bool arrayMode = _arrayMode;
+      _arrayMode = false;
+      _pos++;
+      _group++;
+      try {
+        parse();
+      } catch (...) {
+        // Restore before unwinding: leaving _formula pointing at the dead
+        // stack temporary poisons every later parse made with this parser
+        // (the shared LaTeX::_formula one lives forever), turning the next
+        // tp._formula dereference into a use-after-free.
+        _formula = tmp;
+        _arrayMode = arrayMode;
+        throw;
+      }
       _formula = tmp;
       _arrayMode = arrayMode;
-      throw;
+      if (_formula->_root == nullptr) {
+        auto* rm = new RowAtom();
+        rm->add(tf._root);
+        return sptr<Atom>(rm);
+      }
+      return tf._root;
     }
-    _formula = tmp;
-    _arrayMode = arrayMode;
-    if (_formula->_root == nullptr) {
-      auto* rm = new RowAtom();
-      rm->add(tf._root);
-      return sptr<Atom>(rm);
-    }
-    return tf._root;
-  }
 
-  if (ch == ESCAPE) {
-    auto atom = processEscape();
-    if (_insertion) {
-      _insertion = false;
-      return getArgument();
+    if (ch == ESCAPE) {
+      auto atom = processEscape();
+      if (_insertion) {
+        _insertion = false;
+        continue;
+      }
+      return atom;
     }
+
+    auto atom = convertCharacter(ch, true);
+    _pos++;
     return atom;
   }
-
-  auto atom = convertCharacter(ch, true);
-  _pos++;
-  return atom;
 }
 
 pair<UnitType, float> TeXParser::getLength() {
@@ -1171,7 +1204,13 @@ sptr<Atom> TeXParser::convertCharacter(wchar_t c, bool oneChar) {
       if (!_isMathMode) {
         auto it = Formula::_symbolTextMappings.find(c);
         if (it != Formula::_symbolTextMappings.end()) {
-          auto atom = SymbolAtom::get(it->second);
+          // Copy before writing: SymbolAtom::get() hands out an entry of the
+          // process-wide symbol cache, so stamping the unicode straight into
+          // it changes that symbol for every formula parsed afterwards --
+          // a \text{} holding U+FF08 left the shared "lbrack" atom, the one
+          // every ordinary "(" resolves to, stamped for the life of the
+          // process.
+          auto atom = sptrOf<SymbolAtom>(*SymbolAtom::get(it->second));
           atom->setUnicode(c);
           return atom;
         }
