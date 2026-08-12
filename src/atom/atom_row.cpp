@@ -148,7 +148,19 @@ AtomType RowAtom::rightType() const {
 sptr<Box> RowAtom::createBox(Environment& env) {
   auto x = env.getTeXFont();
   TeXFont& tf = *x;
-  auto* hbox = new HBox();
+  auto hbox = sptrOf<HBox>();
+
+  // _previousAtom doubles as input for nested rows (a parent sets it right
+  // before calling this) and as scratch state for the glue decisions below,
+  // and the success path is the only one that clears it. A throw mid-loop
+  // (the box budget is the reachable one) used to leave it set, so the next
+  // render of this same RowAtom -- which can be an entry of the predefined
+  // -formula cache, shared process-wide -- opened with a Dummy from a dead
+  // formula. Clear on every exit instead.
+  struct PreviousAtomReset {
+    sptr<Dummy>& slot;
+    ~PreviousAtomReset() { slot = nullptr; }
+  } previousAtomReset{_previousAtom};
 
   // convert atoms to boxes and add to the horizontal box
   const int end = _elements.size() - 1;
@@ -242,9 +254,7 @@ sptr<Box> RowAtom::createBox(Environment& env) {
     // kerning do not interfere with the normal glue-rules without kerning
     if (!atom->isKern()) _previousAtom = atom;
   }
-  // reset previous atom
-  _previousAtom = nullptr;
-  return sptr<Box>(hbox);
+  return hbox;
 }
 
 void RowAtom::setPreviousAtom(const sptr<Dummy>& prev) {

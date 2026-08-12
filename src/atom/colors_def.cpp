@@ -116,8 +116,12 @@ color ColorAtom::getColor(std::string name) {
 
     if (r == 0.f && g == 0.f && b == 0.f) return _default;
 
-    if (r == (int) r && g == (int) g && b == (int) b &&
-        R.find('.') == en && G.find('.') == en && B.find('.') == en) {
+    // The integer-model test must not cast to int: 1e999 parses to inf and
+    // "nan" to NaN, where the conversion is undefined. floor() keeps the
+    // "whole number" meaning on finite values only.
+    if (std::isfinite(r) && std::isfinite(g) && std::isfinite(b)
+        && r == std::floor(r) && g == std::floor(g) && b == std::floor(b)
+        && R.find('.') == en && G.find('.') == en && B.find('.') == en) {
       int ir = (int) min(255.f, max(0.f, r));
       int ig = (int) min(255.f, max(0.f, g));
       int ib = (int) min(255.f, max(0.f, b));

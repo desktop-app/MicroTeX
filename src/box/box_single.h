@@ -21,7 +21,6 @@ public:
   // \undertilde groups was enough.
   explicit StrutBox(const sptr<Box>& box) {
     copyMetrics(box);
-    _shift = _shift;
   }
 
   StrutBox(float width, float height, float depth, float shift) {
@@ -109,6 +108,10 @@ public:
   void draw(Graphics2D& g2, float x, float y) override;
 
   static void setFont(const std::string& name);
+
+  /** Restore the default font, so an \externalFont in one formula cannot
+      change what the \Text-family commands render with in later formulas. */
+  static void resetFont();
 
   static void _init_();
 

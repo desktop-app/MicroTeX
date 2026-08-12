@@ -39,7 +39,7 @@ sptr<Box> FencedAtom::createBox(Environment& env) {
   float delta = max(content->_height - axis, content->_depth + axis);
   float minh = max(delta / 500.f * DELIMITER_FACTOR, 2 * delta - shortfall);
 
-  auto* hb = new HBox();
+  auto hb = sptrOf<HBox>();
 
   if (!_middle.empty()) {
     for (const auto& atom : _middle) {
@@ -77,7 +77,7 @@ sptr<Box> FencedAtom::createBox(Environment& env) {
     hb->add(b);
   }
 
-  return sptr<Box>(hb);
+  return hb;
 }
 
 /****************************************** fraction atom *****************************************/
@@ -102,8 +102,15 @@ sptr<Box> FractionAtom::createBox(Environment& env) {
   TexStyle style = env.getStyle();
   // set thickness to default if default value should be use
   float drt = tf.getDefaultRuleThickness(style);
-  if (_nodefault) _thickness *= SpaceAtom::getFactor(_unit, env);
-  else _thickness = _deffactorset ? _deffactor * drt : drt;
+  // Computed into a local, never into the atom: an atom can be rendered more
+  // than once (a \middle fence renders its base twice, an @{} column
+  // separator once per row), and multiplying the member each time compounded
+  // the factor into the rule thickness on every later render.
+  const float thickness = (
+    _nodefault
+    ? _thickness * SpaceAtom::getFactor(_unit, env)
+    : (_deffactorset ? _deffactor * drt : drt)
+  );
 
   // create equal width boxes in appropriate styles
   auto num = (
@@ -127,25 +134,25 @@ sptr<Box> FractionAtom::createBox(Environment& env) {
     shiftdown = tf.getDenom1(style);
   } else {
     shiftdown = tf.getDenom2(style);
-    if (_thickness > 0) shiftup = tf.getNum2(style);
+    if (thickness > 0) shiftup = tf.getNum2(style);
     else shiftup = tf.getNum3(style);
   }
 
   // upper part of vertical box = numerator
-  auto* vb = new VBox();
+  auto vb = sptrOf<VBox>();
   vb->add(num);
 
   // calculate clearance clr, adjust shift amounts and create vertical box
   float clr, delta, axis = tf.getAxisHeight(style);
 
-  if (_thickness > 0) {
+  if (thickness > 0) {
     // with fraction rule
     // clearance clr
-    if (style < TexStyle::text) clr = 3 * _thickness;
-    else clr = _thickness;
+    if (style < TexStyle::text) clr = 3 * thickness;
+    else clr = thickness;
 
     // adjust shift amount
-    delta = _thickness / 2.f;
+    delta = thickness / 2.f;
     float kern1 = shiftup - num->_depth - (axis + delta);
     float kern2 = axis - delta - (denom->_height - shiftdown);
     float delta1 = clr - kern1;
@@ -161,7 +168,7 @@ sptr<Box> FractionAtom::createBox(Environment& env) {
 
     // fill vertical box
     vb->add(sptrOf<StrutBox>(0.f, kern1, 0.f, 0.f));
-    vb->add(sptrOf<RuleBox>(_thickness, num->_width, 0.f));
+    vb->add(sptrOf<RuleBox>(thickness, num->_width, 0.f));
     vb->add(sptrOf<StrutBox>(0.f, kern2, 0.f, 0.f));
   } else {
     // without fraction rule
@@ -186,12 +193,12 @@ sptr<Box> FractionAtom::createBox(Environment& env) {
   vb->_height = shiftup + num->_height;
   vb->_depth = shiftdown + denom->_depth;
 
-  if (!_useKern) return sptr<Box>(vb);
+  if (!_useKern) return vb;
 
   // \nulldelimiterspace is set by default to 1.2pt = 0.12em
   float f = SpaceAtom::getSize(UnitType::em, 0.12f, env);
 
-  return sptrOf<HBox>(sptr<Box>(vb), vb->_width + 2 * f, Alignment::center);
+  return sptrOf<HBox>(vb, vb->_width + 2 * f, Alignment::center);
 }
 
 const string NthRoot::_sqrtSymbol = "sqrt";
@@ -310,7 +317,7 @@ sptr<Box> UnderOverArrowAtom::createBox(Environment& env) {
     arrow = XLeftRightArrowFactory::create(_left, env, b->_width);
   }
 
-  auto* vb = new VBox();
+  auto vb = sptrOf<VBox>();
   if (_over) {
     vb->add(arrow);
     if (_dble) vb->add(sptrOf<StrutBox>(0.f, -sep, 0.f, 0.f));
@@ -327,7 +334,7 @@ sptr<Box> UnderOverArrowAtom::createBox(Environment& env) {
     vb->_height = b->_height;
   }
 
-  return sptr<Box>(vb);
+  return vb;
 }
 
 sptr<Box> XArrowAtom::createBox(Environment& env) {
@@ -363,9 +370,7 @@ sptr<Box> XArrowAtom::createBox(Environment& env) {
   vb->_depth = d;
   vb->_height = h - d;
 
-  auto* hb = new HBox(vb, vb->_width + 2 * sep->_height, Alignment::center);
-
-  return sptr<Box>(hb);
+  return sptrOf<HBox>(vb, vb->_width + 2 * sep->_height, Alignment::center);
 }
 
 void LongDivAtom::calculate(vector<wstring>& results) const {
@@ -451,8 +456,8 @@ sptr<Box> CancelAtom::createBox(Environment& env) {
   overlap->_width = box->_width;
   overlap->_height = box->_height;
   overlap->_depth = box->_depth;
-  auto hbox = new HBox(box);
+  auto hbox = sptrOf<HBox>(box);
   hbox->add(sptr<Box>(new StrutBox(-box->_width, 0, 0, 0)));
   hbox->add(overlap);
-  return sptr<Box>(hbox);
+  return hbox;
 }

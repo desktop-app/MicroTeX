@@ -1210,9 +1210,17 @@ sptr<Atom> TeXParser::convertCharacter(wchar_t c, bool oneChar) {
           // a \text{} holding U+FF08 left the shared "lbrack" atom, the one
           // every ordinary "(" resolves to, stamped for the life of the
           // process.
-          auto atom = sptrOf<SymbolAtom>(*SymbolAtom::get(it->second));
-          atom->setUnicode(c);
-          return atom;
+          // The lookup can still miss: a few mappings name glyphs that no
+          // registered symbol provides (the Greek capitals map to the glyph
+          // itself, e.g. "Α"), and ex_symbol_not_found is not an ex_parse, so
+          // it is not swallowed by partial mode and killed the whole formula.
+          // Fall through to the formula-mapping/character paths instead.
+          try {
+            auto atom = sptrOf<SymbolAtom>(*SymbolAtom::get(it->second));
+            atom->setUnicode(c);
+            return atom;
+          } catch (ex_symbol_not_found&) {
+          }
         }
       }
       auto it = Formula::_symbolFormulaMappings.find(c);

@@ -15,11 +15,21 @@ sptr<Box> DelimiterFactory::create(SymbolAtom& symbol, Environment& env, int siz
   TeXFont& tf = *(env.getTeXFont());
   const TexStyle style = env.getStyle();
   Char c = tf.getChar(symbol.getName(), style);
-  int i = 0;
+  const float baseTotal = c.getHeight() + c.getDepth();
 
-  for (int i = 1; i <= size && tf.hasNextLarger(c); i++) c = tf.getNextLarger(c, style);
+  // One counter for both the loop and the fallback test: with a shadowed
+  // inner counter the test always saw 0, so the extension-assembly path was
+  // taken whenever the ladder simply ran out early.
+  int i = 1;
+  for (; i <= size && tf.hasNextLarger(c); i++) c = tf.getNextLarger(c, style);
 
-  if (i <= size && !tf.hasNextLarger(c)) {
+  // For extensible delimiters (vert, Vert, the arrows) the first next-larger
+  // rung in the font tables is the repeatable segment glyph, which is
+  // *smaller* than the display-style base char, so a plain ladder walk would
+  // hand \big| a bar shorter than a bare |. Route those degenerate walks to
+  // the height-targeted factory, like a ladder that ran out early.
+  const bool walkedSmaller = (c.getHeight() + c.getDepth()) < baseTotal;
+  if ((i <= size && !tf.hasNextLarger(c)) || walkedSmaller) {
     CharBox A(tf.getChar(L'A', "mathnormal", style));
     auto b = create(symbol.getName(), env, size * (A._height + A._depth));
     return b;
@@ -50,12 +60,15 @@ sptr<Box> DelimiterFactory::create(const string& symbol, Environment& env, float
         }*/
     return sptrOf<CharBox>(c);
   } else if (tf.isExtensionChar(c)) {
-    Extension* ext = tf.getExtension(c, style);
+    // Owning from the start: the repeat loop below appends boxes, which is
+    // bounded by the box budget, so it can throw -- and a raw ext or vBox
+    // would leak (with the whole assembled delimiter) on that path.
+    std::unique_ptr<Extension> ext(tf.getExtension(c, style));
     // No extension recipe after all, fall through to the tallest char.
     if (ext == nullptr) return sptrOf<CharBox>(c);
 
     // construct vertical box
-    auto* vBox = new VBox();
+    auto vBox = sptrOf<VBox>();
 
     // insert top part
     if (ext->hasTop()) {
@@ -100,8 +113,7 @@ sptr<Box> DelimiterFactory::create(const string& symbol, Environment& env, float
         }
       }
     }
-    delete ext;
-    return sptr<Box>(vBox);
+    return vBox;
   }
   // no extensions, so return the tallest possible character
   return sptrOf<CharBox>(c);
@@ -151,10 +163,10 @@ sptr<Box> XLeftRightArrowFactory::create(Environment& env, float width) {
   float swidth = left->_width + right->_width;
 
   if (width < swidth) {
-    auto* hb = new HBox(left);
+    auto hb = sptrOf<HBox>(left);
     hb->add(sptrOf<StrutBox>(-min(swidth - width, left->_width), 0.f, 0.f, 0.f));
     hb->add(right);
-    return sptr<Box>(hb);
+    return hb;
   }
 
   sptr<Box> minu = SmashedAtom(MINUS, "").createBox(env);
@@ -164,7 +176,7 @@ sptr<Box> XLeftRightArrowFactory::create(Environment& env, float width) {
   swidth += 2 * kern->_width;
   width = boundedArrowWidth(width, swidth, mwidth);
 
-  auto* hb = new HBox();
+  auto hb = sptrOf<HBox>();
   float w = 0.f;
   if (mwidth > 0.f) {
     for (w = 0; w < width - swidth - mwidth; w += mwidth) {
@@ -180,7 +192,7 @@ sptr<Box> XLeftRightArrowFactory::create(Environment& env, float width) {
   hb->add(kern);
   hb->add(right);
 
-  return sptr<Box>(hb);
+  return hb;
 }
 
 sptr<Box> XLeftRightArrowFactory::create(bool left, Environment& env, float width) {
@@ -206,7 +218,7 @@ sptr<Box> XLeftRightArrowFactory::create(bool left, Environment& env, float widt
   swidth += kern->_width;
   width = boundedArrowWidth(width, swidth, mwidth);
 
-  auto* hb = new HBox();
+  auto hb = sptrOf<HBox>();
   float w = 0.f;
   if (mwidth > 0.f) {
     for (w = 0; w < width - swidth - mwidth; w += mwidth) {
@@ -231,5 +243,5 @@ sptr<Box> XLeftRightArrowFactory::create(bool left, Environment& env, float widt
   hb->_depth = d / 2;
   hb->_height = h;
 
-  return sptr<Box>(hb);
+  return hb;
 }

@@ -165,9 +165,9 @@ void MatrixAtom::parsePositions(wstring opt, vector<Alignment>& lpos) {
   if (lpos.empty()) lpos.push_back(Alignment::center);
 }
 
-float* MatrixAtom::getColumnSep(Environment& env, float width) {
+std::vector<float> MatrixAtom::getColumnSep(Environment& env, float width) {
   const int cols = _matrix->cols();
-  auto* arr = new float[cols + 1]();
+  std::vector<float> arr(cols + 1, 0.f);
   sptr<Box> Align, AlignSep, Hsep;
   float h, w = env.getTextWidth();
   int i = 0;
@@ -275,7 +275,7 @@ float* MatrixAtom::getColumnSep(Environment& env, float width) {
 
 void MatrixAtom::recalculateLine(
   const int rows,
-  sptr<Box>** boxarr,
+  std::vector<std::vector<sptr<Box>>>& boxarr,
   vector<sptr<Atom>>& multiRows,
   float* height,
   float* depth,
@@ -473,11 +473,12 @@ sptr<Box> MatrixAtom::createBox(Environment& e) {
   if (int64_t(rows) * int64_t(cols) > kMaxArrayCells)
     throw ex_parse("Matrix is too large!");
 
-  auto* lineDepth = new float[rows]();
-  auto* lineHeight = new float[rows]();
-  auto* colWidth = new float[cols]();
-  auto** boxarr = new sptr<Box>* [rows]();
-  for (int i = 0; i < rows; i++) boxarr[i] = new sptr<Box>[cols]();
+  // RAII containers, not raw arrays: a throw anywhere below (the box budget
+  // is the reachable one) must not leak the half-built grid.
+  std::vector<float> lineDepth(rows, 0.f);
+  std::vector<float> lineHeight(rows, 0.f);
+  std::vector<float> colWidth(cols, 0.f);
+  std::vector<std::vector<sptr<Box>>> boxarr(rows, std::vector<sptr<Box>>(cols));
 
   float matW = 0;
   float drt = e.getTeXFont()->getDefaultRuleThickness(e.getStyle());
@@ -547,7 +548,7 @@ sptr<Box> MatrixAtom::createBox(Environment& e) {
   for (int j = 0; j < cols; j++) matW += colWidth[j];
 
   // The horizontal separator's width
-  float* Hsep = getColumnSep(env, matW);
+  const auto Hsep = getColumnSep(env, matW);
 
   for (auto& i : listMultiCol) {
     auto* multi = (MulticolumnAtom*) i.get();
@@ -575,9 +576,9 @@ sptr<Box> MatrixAtom::createBox(Environment& e) {
 
   auto Vsep = _vsep_in.createBox(env);
   // Recalculate the height of the row
-  recalculateLine(rows, boxarr, listMultiRow, lineHeight, lineDepth, drt, Vsep->_height);
+  recalculateLine(rows, boxarr, listMultiRow, lineHeight.data(), lineDepth.data(), drt, Vsep->_height);
 
-  auto* vb = new VBox();
+  auto vb = sptrOf<VBox>();
   float totalHeight = 0;
   float Vspace = Vsep->_height / 2;
 
@@ -623,25 +624,24 @@ sptr<Box> MatrixAtom::createBox(Environment& e) {
 
           bool isLastVline = true;
 
-          WrapperBox* wb = nullptr;
+          sptr<WrapperBox> wb;
           int tj = j;
           float l = j == 0 ? Hsep[j] : Hsep[j] / 2;
           if (mca == nullptr) {
-            wb = new WrapperBox(
+            wb = sptrOf<WrapperBox>(
               boxarr[i][j], colWidth[j], lineHeight[i], lineDepth[i], _position[j]  //
             );
           } else {
-            auto b = generateMulticolumn(env, boxarr[i][j], Hsep, colWidth, mca, j);
+            auto b = generateMulticolumn(env, boxarr[i][j], Hsep.data(), colWidth.data(), mca, j);
             j += multicolumnSpan(mca, j) - 1;
-            wb = new WrapperBox(b, b->_width, lineHeight[i], lineDepth[i], Alignment::left);
+            wb = sptrOf<WrapperBox>(b, b->_width, lineHeight[i], lineDepth[i], Alignment::left);
             isLastVline = mca->hasRightVline();
           }
           float r = j == cols - 1 ? Hsep[j + 1] : Hsep[j + 1] / 2;
           wb->addInsets(l, Vspace, r, Vspace);
           applyCell(*wb, i, j);
-          sptr<Box> swb(wb);
-          boxarr[i][tj] = swb;
-          hb->add(swb);
+          boxarr[i][tj] = wb;
+          hb->add(wb);
 
           auto it = _vlines.find(j + 1);
           if (isLastVline && it != _vlines.end()) {
@@ -693,14 +693,7 @@ sptr<Box> MatrixAtom::createBox(Environment& e) {
   vb->_height = totalHeight / 2 + axis;
   vb->_depth = totalHeight / 2 - axis;
 
-  delete[] Hsep;
-  delete[] lineDepth;
-  delete[] lineHeight;
-  delete[] colWidth;
-  for (int i = 0; i < rows; i++) delete[] boxarr[i];
-  delete[] boxarr;
-
-  return sptr<Box>(vb);
+  return vb;
 }
 
 /*************************************** multicolumn atoms ****************************************/
@@ -781,8 +774,14 @@ sptr<Box> HdotsforAtom::createBox(Environment& env) {
   // If no width specified, create a box with one dot
   if (_width == 0) return createBox(space, dot, env);
 
-  float x = (_width - dot->_width) / (space + dot->_width);
-  int count = (int) floor(x);
+  const float x = (_width - dot->_width) / (space + dot->_width);
+  // Both sides of the division are built from formula-controlled lengths
+  // (the spanned column width and the coefficient-scaled gap), so x can be
+  // negative, NaN, or past int's range, where casting floor(x) to int is
+  // undefined. The fill loop below is bounded by the box budget anyway, so
+  // saturating at INT_MAX changes no layout that could complete.
+  int count = 0;
+  if (x > 0.f) count = (x >= (float) INT_MAX) ? INT_MAX : (int) floor(x);
 
   // Only one dot can be placed in
   if (count == 0) {
@@ -812,7 +811,7 @@ sptr<Box> MultlineAtom::createBox(Environment& env) {
     return MatrixAtom(_isPartial, _column, L"").createBox(env);
 
   const int rows = _column->rows();
-  auto* vb = new VBox();
+  auto vb = sptrOf<VBox>();
   auto Vsep = _vsep_in.createBox(env);
   const bool gather = (_lineType == MultiLineType::gather);
   for (int i = 0; i < rows; i++) {
@@ -844,5 +843,5 @@ sptr<Box> MultlineAtom::createBox(Environment& env) {
   vb->_height = h / 2;
   vb->_depth = h / 2;
 
-  return sptr<Box>(vb);
+  return vb;
 }

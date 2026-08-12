@@ -86,7 +86,7 @@ sptr<Box> BoxSplitter::split(const sptr<Box>& b, float width, float lineSpace) {
 sptr<Box> BoxSplitter::split(const sptr<HBox>& hb, float width, float lineSpace) {
   if (width == 0 || hb->_width <= width) return hb;
 
-  auto* vbox = new VBox();
+  auto vbox = sptrOf<VBox>();
   sptr<HBox> first, second;
   stack<Position> positions;
   sptr<HBox> hbox = hb;
@@ -112,7 +112,7 @@ sptr<Box> BoxSplitter::split(const sptr<HBox>& hb, float width, float lineSpace)
 
   if (second != nullptr) {
     vbox->add(second, lineSpace);
-    return sptr<Box>(vbox);
+    return vbox;
   }
 
   return hbox;

@@ -255,12 +255,12 @@ int ArrayFormula::cols() const {
 }
 
 sptr<VRowAtom> ArrayFormula::getAsVRow() {
-  auto* vr = new VRowAtom();
+  auto vr = sptrOf<VRowAtom>();
   vr->setAddInterline(true);
   for (auto& c : _array) {
     for (auto& j : c) vr->append(j);
   }
-  return sptr<VRowAtom>(vr);
+  return vr;
 }
 
 void ArrayFormula::checkDimensions() {
@@ -273,6 +273,17 @@ void ArrayFormula::checkDimensions() {
   for (size_t i = 1; i < _row; i++) {
     if (_array[i].size() > _col) _col = _array[i].size();
   }
+
+  // The padding below materializes _row*_col cells, and nothing else bounds
+  // that product on this path: the matching cap in MatrixAtom runs later, at
+  // layout, and the top-level \\ path never reaches a MatrixAtom at all. A
+  // formula within the input length limit can still pair thousands of
+  // columns with thousands of rows, which is hundreds of megabytes of padded
+  // empty cells here (and again in getAsVRow), so enforce the layout cap's
+  // value before allocating. Real matrices are nowhere near it.
+  constexpr int64_t kMaxArrayCells = 100000;
+  if (int64_t(_row) * int64_t(_col) > kMaxArrayCells)
+    throw ex_parse("Matrix is too large!");
 
   for (size_t i = 0; i < _row; i++) {
     size_t j = _array[i].size();

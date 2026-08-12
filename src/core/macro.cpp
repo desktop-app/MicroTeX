@@ -19,13 +19,19 @@ bool NewCommandMacro::isMacro(const wstring& name) {
 }
 
 void NewCommandMacro::checkNew(const wstring& name) {
-  // Reject redefining a built-in too (not just an existing user macro): a
-  // user \newcommand{\frac}{...} would otherwise replace and free the
-  // built-in for every later formula. _builtinCommands is empty during
-  // _init_, so the predefined registrations below are unaffected.
-  if (_errIfConflict
-      && (isMacro(name)
-          || _builtinCommands.find(name) != _builtinCommands.end()))
+  // Never let a formula replace a built-in command: MacroInfo::add frees the
+  // previous registration, and the built-in snapshot in _reset() restores
+  // user macros by name, so a replaced built-in stays replaced (and the
+  // original delegate stays freed) for the life of the process. This check
+  // must not depend on _errIfConflict -- \fatalIfCmdConflict{false} turns
+  // that off from formula text, which made \newcommand{\frac}{...} delete
+  // the built-in \frac for every later formula. _builtinCommands is empty
+  // during _init_, so the predefined registrations are unaffected.
+  if (_builtinCommands.find(name) != _builtinCommands.end())
+    throw ex_parse(
+      "Command " + wide2utf8(name) + " is built-in and can not be redefined!"
+    );
+  if (_errIfConflict && isMacro(name))
     throw ex_parse(
       "Command " + wide2utf8(name)
       + " already exists! Use renewcommand instead!"
@@ -70,6 +76,9 @@ void NewCommandMacro::_reset() {
   }
   _codes = _baselineCodes;
   _replacements = _baselineReplacements;
+  // A formula can flip this with \fatalIfCmdConflict; like every other
+  // formula-settable global it must not leak into the next parse.
+  _errIfConflict = true;
 }
 
 void NewCommandMacro::addNewCommand(const wstring& name, const wstring& code, int argc) {

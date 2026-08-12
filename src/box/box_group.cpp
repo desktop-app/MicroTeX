@@ -55,9 +55,9 @@ void HBox::recalculate(const Box& box) {
 }
 
 sptr<HBox> HBox::cloneBox() {
-  auto* b = new HBox();
+  auto b = sptrOf<HBox>();
   b->_shift = _shift;
-  return sptr<HBox>(b);
+  return b;
 }
 
 void HBox::add(const sptr<Box>& box) {

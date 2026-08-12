@@ -99,7 +99,7 @@ private:
 
   static void recalculateLine(
     int rows,
-    sptr<Box>** boxarr,
+    std::vector<std::vector<sptr<Box>>>& boxarr,
     std::vector<sptr<Atom>>& multiRows,
     float* height,
     float* depth,
@@ -107,7 +107,7 @@ private:
     float vspace
   );
 
-  float* getColumnSep(Environment& env, float width);
+  std::vector<float> getColumnSep(Environment& env, float width);
 
   void applyCell(WrapperBox& box, int i, int j);
 
@@ -179,7 +179,7 @@ public:
     float drt = env.getTeXFont()->getDefaultRuleThickness(env.getStyle());
     auto b = sptrOf<RuleBox>(_height, drt, _shift, MatrixAtom::LINE_COLOR, true);
     auto sep = sptrOf<StrutBox>(2 * drt, 0.f, 0.f, 0.f);
-    auto* hb = new HBox();
+    auto hb = sptrOf<HBox>();
     for (int i = 0; i < _n - 1; i++) {
       hb->add(b);
       hb->add(sep);
@@ -187,7 +187,7 @@ public:
 
     if (_n > 0) hb->add(b);
 
-    return sptr<Box>(hb);
+    return hb;
   }
 
   __decl_clone(VlineAtom)

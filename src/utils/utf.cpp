@@ -42,7 +42,9 @@ wstring tex::utf82wide(const std::string& src) {
   const char* in = src.c_str();
   wstring out;
   if (in == nullptr) return out;
-  unsigned int codepoint;
+  // Initialized: a leading continuation byte would otherwise fold an
+  // uninitialized value into the accumulator.
+  unsigned int codepoint = 0;
   while (*in != 0) {
     auto ch = static_cast<unsigned char>(*in);
     if (ch <= 0x7f) {

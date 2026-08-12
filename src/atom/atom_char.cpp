@@ -80,13 +80,13 @@ sptr<SymbolAtom> SymbolAtom::get(const string& name) {
   return it->second;
 }
 
-Char CharAtom::getChar(TeXFont& tf, TexStyle style, bool smallCap) {
+Char CharAtom::getChar(TeXFont& tf, TexStyle style, bool smallCap, const string& textStyle) {
   wchar_t chr = _c;
   if (smallCap) {
     if (isAsciiLower(_c)) chr = asciiToUpper(_c);
   }
-  if (_textStyle.empty()) return tf.getDefaultChar(chr, style);
-  return tf.getChar(chr, _textStyle, style);
+  if (textStyle.empty()) return tf.getDefaultChar(chr, style);
+  return tf.getChar(chr, textStyle, style);
 }
 
 //sptr<CharFont> CharAtom::getCharFont(TeXFont& tf) {
@@ -95,12 +95,14 @@ Char CharAtom::getChar(TeXFont& tf, TexStyle style, bool smallCap) {
 //}
 
 sptr<Box> CharAtom::createBox(Environment& env) {
-  if (_textStyle.empty()) {
-    const string& ts = env.getTextStyle();
-    if (!ts.empty()) _textStyle = ts;
-  }
+  // Resolve the environment's text style locally, never stamp it into the
+  // atom: entries of the predefined-formula cache (\log, \lim, ...) are
+  // shared process-wide, and a style written in by the first render changed
+  // how that command rendered in every formula afterwards -- \mathfrak{\log}
+  // fraktur-ized \log for the rest of the session.
+  const string& textStyle = _textStyle.empty() ? env.getTextStyle() : _textStyle;
   bool smallCap = env.getSmallCap();
-  Char ch = getChar(*env.getTeXFont(), env.getStyle(), smallCap);
+  Char ch = getChar(*env.getTeXFont(), env.getStyle(), smallCap, textStyle);
   sptr<Box> box = sptrOf<CharBox>(ch);
   if (smallCap && isAsciiLower(_c)) {
     // we have a small capital

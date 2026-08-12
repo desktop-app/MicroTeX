@@ -6,6 +6,7 @@
 #include <cctype>
 #include <cerrno>
 #include <climits>
+#include <cstdlib>
 #include <sstream>
 #include <string>
 #include <functional>
@@ -27,8 +28,10 @@ inline std::string tostring(T val) {
 template<>
 inline std::string tostring(wchar_t val) {
   char buf[16];
-  auto len = wctomb(buf, val);
-  return std::string(buf, len);
+  // -1 for a character the current locale cannot represent; feeding it to
+  // the string constructor as a length would ask for size_t(-1) bytes.
+  const auto len = wctomb(buf, val);
+  return (len > 0) ? std::string(buf, len) : std::string("?");
 }
 
 /** Convert a value to wide string */

@@ -39,11 +39,10 @@ sptr<Box> MathAtom::createBox(Environment& env) {
 
 sptr<Box> HlineAtom::createBox(Environment& env) {
   float drt = env.getTeXFont()->getDefaultRuleThickness(env.getStyle());
-  Box* b = new RuleBox(drt, _width, _shift, _color, false);
-  auto* vb = new VBox();
-  vb->add(sptr<Box>(b));
+  auto vb = sptrOf<VBox>();
+  vb->add(sptrOf<RuleBox>(drt, _width, _shift, _color, false));
   vb->_type = AtomType::hline;
-  return sptr<Box>(vb);
+  return vb;
 }
 
 CumulativeScriptsAtom::CumulativeScriptsAtom(
@@ -118,9 +117,9 @@ SpaceAtom UnderScoreAtom::_s(UnitType::em, 0.06f, 0.f, 0.f);
 
 sptr<Box> UnderScoreAtom::createBox(Environment& env) {
   float drt = env.getTeXFont()->getDefaultRuleThickness(env.getStyle());
-  auto* hb = new HBox(_s.createBox(env));
+  auto hb = sptrOf<HBox>(_s.createBox(env));
   hb->add(sptrOf<RuleBox>(drt, _w.createBox(env)->_width, 0.f));
-  return sptr<Box>(hb);
+  return hb;
 }
 
 /************************************ VRowAtom implementation *************************************/
@@ -171,7 +170,7 @@ void VRowAtom::append(const sptr<Atom>& el) {
 }
 
 sptr<Box> VRowAtom::createBox(Environment& env) {
-  auto* vb = new VBox();
+  auto vb = sptrOf<VBox>();
   auto interline = sptrOf<StrutBox>(0.f, env.getInterline(), 0.f, 0.f);
 
   if (_halign != Alignment::none) {
@@ -215,7 +214,7 @@ sptr<Box> VRowAtom::createBox(Environment& env) {
     vb->_height = vb->_depth + vb->_height - t;
     vb->_depth = t;
   }
-  return sptr<Box>(vb);
+  return vb;
 }
 
 /*************************************** color atom implementation ********************************/
@@ -358,7 +357,7 @@ sptr<Box> AccentedAtom::createBox(Environment& env) {
   float delta = _acc ? ec : min(b->_height, tf->getXHeight(style, ch.getFontCode()));
 
   // create vertical box
-  auto* vBox = new VBox();
+  auto vBox = sptrOf<VBox>();
 
   // accent
   sptr<Box> y(nullptr);
@@ -391,13 +390,13 @@ sptr<Box> AccentedAtom::createBox(Environment& env) {
   vBox->_height = total - d;
 
   if (diff < 0) {
-    auto* hb = new HBox(sptrOf<StrutBox>(diff, 0.f, 0.f, 0.f));
-    hb->add(sptr<Box>(vBox));
+    auto hb = sptrOf<HBox>(sptrOf<StrutBox>(diff, 0.f, 0.f, 0.f));
+    hb->add(vBox);
     hb->_width = u;
-    return sptr<Box>(hb);
+    return hb;
   }
 
-  return sptr<Box>(vBox);
+  return vBox;
 }
 
 /************************************ UnderOverAtom implementation *******************************/
@@ -424,7 +423,7 @@ sptr<Box> UnderOverAtom::createBox(Environment& env) {
   }
 
   // create vertical box
-  auto* vBox = new VBox();
+  auto vBox = sptrOf<VBox>();
 
   // last font used by base (for mono-space atoms following)
   env.setLastFontId(b->lastFontId());
@@ -452,7 +451,7 @@ sptr<Box> UnderOverAtom::createBox(Environment& env) {
   // set height and depth
   vBox->_depth = vBox->_height + vBox->_depth - h;
   vBox->_height = h;
-  return sptr<Box>(vBox);
+  return vBox;
 }
 
 /************************************ ScriptsAtom implementation **********************************/
@@ -601,7 +600,7 @@ sptr<Box> ScriptsAtom::createBox(Environment& env) {
     }
 
     // create total box
-    auto* vBox = new VBox();
+    auto vBox = sptrOf<VBox>();
     sup->_shift = delta;
     vBox->add(sup);
     // recalculate inter-space
@@ -610,7 +609,7 @@ sptr<Box> ScriptsAtom::createBox(Environment& env) {
     vBox->add(sub);
     vBox->_height = shiftUp + x->_height;
     vBox->_depth = shiftDown + y->_depth;
-    hor->add(sptr<Box>(vBox));
+    hor->add(vBox);
   }
   hor->add(deltaSymbol);
   return hor;
@@ -686,7 +685,7 @@ sptr<Box> BigOperatorAtom::createSideSets(Environment& env) {
   if (_under != nullptr) z = _under->createBox(*(env.subStyle()));
 
   // build vertical box
-  auto* vbox = new VBox();
+  auto vbox = sptrOf<VBox>();
   float bigop5 = tf->getBigOpSpacing5(style), kern = 0;
 
   if (_over != nullptr) {
@@ -712,7 +711,7 @@ sptr<Box> BigOperatorAtom::createSideSets(Environment& env) {
   vbox->_height = h;
   vbox->_depth = total - h;
 
-  return sptr<Box>(vbox);
+  return vbox;
 }
 
 sptr<Box> BigOperatorAtom::createBox(Environment& env) {
@@ -722,6 +721,7 @@ sptr<Box> BigOperatorAtom::createBox(Environment& env) {
   const TexStyle style = env.getStyle();
 
   RowAtom* row = nullptr;
+  sptr<RowAtom> rowCopy;
   auto Base = _base;
 
   auto* ta = dynamic_cast<TypedAtom*>(_base.get());
@@ -729,8 +729,16 @@ sptr<Box> BigOperatorAtom::createBox(Environment& env) {
     auto atom = ta->getBase();
     auto* ra = dynamic_cast<RowAtom*>(atom.get());
     if (ra != nullptr && ra->_lookAtLastAtom && _base->_limitsType != LimitsType::limits) {
-      _base = ra->popLastAtom();
-      row = ra;
+      // The row can be shared through the predefined-formula cache (e.g. the
+      // one inside \lim), and the pop/render/restore dance below mutates it.
+      // On a shared row that mutation is process-global, and a throw mid-way
+      // (the box budget is the reachable one) leaves it corrupted -- missing
+      // or extra trailing atoms -- for every formula rendered afterwards.
+      // Work on a copy: cloning a RowAtom copies its element vector, so pops
+      // and appends never touch the shared one.
+      rowCopy = std::dynamic_pointer_cast<RowAtom>(privateCopy(atom));
+      row = rowCopy.get();
+      _base = row->popLastAtom();
     } else {
       _base = atom;
     }
@@ -790,7 +798,7 @@ sptr<Box> BigOperatorAtom::createBox(Environment& env) {
   z = changeWidth(z, maxW);
 
   // build vertical box
-  auto* vBox = new VBox();
+  auto vBox = sptrOf<VBox>();
 
   float bigop5 = tf->getBigOpSpacing5(style), kern = 0;
 
@@ -822,13 +830,13 @@ sptr<Box> BigOperatorAtom::createBox(Environment& env) {
   vBox->_depth = total - h;
 
   if (row != nullptr) {
-    auto* hb = new HBox(row->createBox(env));
+    auto hb = sptrOf<HBox>(row->createBox(env));
     row->add(_base);
-    hb->add(sptr<Box>(vBox));
+    hb->add(vBox);
     _base = Base;
-    return sptr<Box>(hb);
+    return hb;
   }
-  return sptr<Box>(vBox);
+  return vBox;
 }
 
 /*********************************** SideSetsAtom implementation **********************************/
@@ -852,12 +860,12 @@ sptr<Box> SideSetsAtom::createBox(Environment& env) {
   }
   if (r != nullptr && r->_base == nullptr) r->_base = pa;
 
-  auto hb = new HBox();
+  auto hb = sptrOf<HBox>();
   if (_left != nullptr) hb->add(_left->createBox(env));
   hb->add(bb);
   if (_right != nullptr) hb->add(_right->createBox(env));
 
-  return sptr<Box>(hb);
+  return hb;
 }
 
 /******************************** OverUnderDelimiter implementation *******************************/
@@ -892,7 +900,7 @@ sptr<Box> OverUnderDelimiter::createBox(Environment& env) {
   }
 
   const auto kb = _kern.createBox(env);
-  auto vbox = new VBox();
+  auto vbox = sptrOf<VBox>();
   if (_over) {
     if (sb != nullptr) {
       vbox->add(sb);
@@ -914,5 +922,5 @@ sptr<Box> OverUnderDelimiter::createBox(Environment& env) {
     vbox->_height = base->_height;
     vbox->_depth = total - base->_height;
   }
-  return sptr<Box>(vbox);
+  return vbox;
 }

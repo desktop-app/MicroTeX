@@ -49,6 +49,10 @@ void TextRenderingBox::setFont(const string& name) {
   _font = Font::_create(name, PLAIN, 10);
 }
 
+void TextRenderingBox::resetFont() {
+  _font = Font::_create("Serif", PLAIN, 10);
+}
+
 void TextRenderingBox::init(
   const wstring& str, int type, float size, const sptr<Font>& f, bool kerning
 ) {

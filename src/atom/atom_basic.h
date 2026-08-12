@@ -382,9 +382,14 @@ public:
   }
 
   sptr<Atom> getBase() {
+    // Copy on every call rather than memoizing into _atom: the TypedAtom can
+    // be an entry of the predefined-formula cache (\lim, \mathop output),
+    // shared process-wide, and writing the adjusted atom back into it
+    // mutated that cache at render time.
     if (_atom != nullptr && _atom->_limitsType != _limitsType) {
-      _atom = privateCopy(_atom);
-      _atom->_limitsType = _limitsType;
+      auto copy = privateCopy(_atom);
+      copy->_limitsType = _limitsType;
+      return copy;
     }
     return _atom;
   }

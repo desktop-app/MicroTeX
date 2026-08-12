@@ -122,8 +122,10 @@ int TeXRender::getWidth() const {
 }
 
 float TeXRender::getBaseline() const {
+  // double: getHeight()/getDepth() saturate at the int extremes for absurd
+  // formulas, so their difference does not necessarily fit in an int.
   const auto height = getHeight();
-  return height ? float(height - getDepth()) / float(height) : 0.f;
+  return height ? float((double(height) - getDepth()) / double(height)) : 0.f;
 }
 
 void TeXRender::setTextSize(float textSize) {
@@ -162,7 +164,18 @@ void TeXRender::setHeight(int height, Alignment align) {
 }
 
 void TeXRender::draw(Graphics2D& g2, int x, int y) {
-  color old = g2.getColor();
+  const color old = g2.getColor();
+  // Restored on every exit, including a throw out of the box tree: the
+  // scaled transform must not leak into the caller's painter.
+  struct G2Restore {
+    Graphics2D& g2;
+    color old;
+    ~G2Restore() {
+      g2.reset();
+      g2.setColor(old);
+    }
+  } restore{g2, old};
+
   g2.scale(_textSize, _textSize);
   if (!isTransparent(_fg)) {
     g2.setColor(_fg);
@@ -172,10 +185,6 @@ void TeXRender::draw(Graphics2D& g2, int x, int y) {
 
   // draw formula box
   _box->draw(g2, (x + _insets.left) / _textSize, (y + _insets.top) / _textSize + _box->_height);
-
-  // restore
-  g2.reset();
-  g2.setColor(old);
 }
 
 DefaultTeXFont* TeXRenderBuilder::createFont(float size, int type) {
@@ -206,11 +215,13 @@ TeXRender* TeXRenderBuilder::build(const sptr<Atom>& fc) {
     : createFont(_textSize, _type)
   );
   sptr<TeXFont> tf(font);
-  Environment* env;
+  // Owning from the start: createBox below throws (the box budget is the
+  // reachable case), and a raw env would leak on that path.
+  std::unique_ptr<Environment> env;
   if (_widthUnit != UnitType::none && _textWidth != 0) {
-    env = new Environment(_style, tf, _widthUnit, _textWidth);
+    env = std::make_unique<Environment>(_style, tf, _widthUnit, _textWidth);
   } else {
-    env = new Environment(_style, tf);
+    env = std::make_unique<Environment>(_style, tf);
   }
 
   if (_lineSpaceUnit != UnitType::none) {
@@ -235,6 +246,5 @@ TeXRender* TeXRenderBuilder::build(const sptr<Atom>& fc) {
 
   if (!isTransparent(_fg)) render->setForeground(_fg);
 
-  delete env;
   return render;
 }

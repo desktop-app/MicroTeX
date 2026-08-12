@@ -158,10 +158,10 @@ private:
   bool _mathMode;
 
   /**
-   * Get the Char-object representing this character ("c") in the right text
-   * style
+   * Get the Char-object representing this character ("c") in the given text
+   * style (empty means the default text style)
    */
-  Char getChar(TeXFont& tf, TexStyle style, bool smallCap);
+  Char getChar(TeXFont& tf, TexStyle style, bool smallCap, const std::string& textStyle);
 
 public:
   CharAtom() = delete;
@@ -193,7 +193,7 @@ public:
   // workaround for the MSVS's LNK2019 error
   // it should be implemented in the atom_char.cpp file
   sptr<CharFont> getCharFont(TeXFont& tf) override {
-    return getChar(tf, TexStyle::display, false).getCharFont();
+    return getChar(tf, TexStyle::display, false, _textStyle).getCharFont();
   }
 
   __decl_clone(CharAtom)
