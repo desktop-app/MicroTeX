@@ -84,7 +84,20 @@ void DefaultTeXFont::addAlphabet(
   if (!b) {
     TeXParser::_isLoading = true;
     string file = lang;
-    addTeXFontDescription(base, file);
+    try {
+      addTeXFontDescription(base, file);
+    } catch (...) {
+      // Record the attempted blocks and restore the flag: leaving
+      // _isLoading set (as a throw used to do) disables the alphabet
+      // registration check for the rest of the process, and resetting it
+      // without recording would re-run this failing path for every later
+      // character of the same block.
+      for (size_t i = 0; i < alphabet.size(); i++) {
+        _loadedAlphabets.push_back(alphabet[i]);
+      }
+      TeXParser::_isLoading = false;
+      throw;
+    }
     for (size_t i = 0; i < alphabet.size(); i++) {
       _loadedAlphabets.push_back(alphabet[i]);
     }
@@ -299,9 +312,23 @@ void DefaultTeXFont::setMathSizes(float ds, float ts, float ss, float sss) {
       || ds == 0.f) {
     return;
   }
-  _generalSettings["scriptfactor"] = abs(ss / ds);
-  _generalSettings["scriptscriptfactor"] = abs(sss / ds);
-  _generalSettings["textfactor"] = abs(ts / ds);
+  // The quotients need the same care as the inputs: a tiny ds with huge
+  // numerators ("\DeclareMathSizes{1e-38}{3.4e38}{1}{1}") overflows a
+  // factor to inf even though every input is finite, and a zero numerator
+  // ("\DeclareMathSizes{5}{0}{1}{1}") stores 0, which CharBox and
+  // TextRenderingBox draw() paths un-scale by dividing into inf/NaN
+  // painter transforms.
+  const auto sf = abs(ss / ds);
+  const auto ssf = abs(sss / ds);
+  const auto tf = abs(ts / ds);
+  if (!std::isfinite(sf) || sf <= 0.f
+      || !std::isfinite(ssf) || ssf <= 0.f
+      || !std::isfinite(tf) || tf <= 0.f) {
+    return;
+  }
+  _generalSettings["scriptfactor"] = sf;
+  _generalSettings["scriptscriptfactor"] = ssf;
+  _generalSettings["textfactor"] = tf;
   TeXRender::_defaultSize = abs(ds);
 }
 

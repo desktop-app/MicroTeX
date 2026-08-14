@@ -120,6 +120,14 @@ void MatrixAtom::parsePositions(wstring opt, vector<Alignment>& lpos) {
         constexpr int kMaxColumnSpecRepeat = 1000;
         if (nrep < 0 || nrep > kMaxColumnSpecRepeat)
           throw ex_parse("Bad column-spec repeat count!");
+        // Check the product before building it: the expanded length is only
+        // examined at the top of the next loop turn, so building the repeat
+        // first (\begin{array}{*{1000}{<30K chars>}}) transiently allocates
+        // a few hundred MB before that check throws it away.
+        if (len + (long long) nrep * (long long) args[2].length()
+            > kMaxColumnSpecLength) {
+          throw ex_parse("Column specification is too complex!");
+        }
         wstring str;
         for (int j = 0; j < nrep; j++) str += args[2];
         opt.insert(pos, str);
@@ -144,6 +152,12 @@ void MatrixAtom::parsePositions(wstring opt, vector<Alignment>& lpos) {
         int spos = pos + int(min(size_t(len - pos), longestColumnType)) + 1;
         bool hasrep = false;
         while (--spos > pos) {
+          // Charge the probes against the step budget too: each one builds
+          // and hashes a substring, so a long registered column-type name
+          // (up to the 16-char cap) would otherwise buy up to 16 probes of
+          // up to 16 chars per spec character without the budget noticing.
+          if (++steps > kMaxColumnSpecSteps)
+            throw ex_parse("Column specification is too complex!");
           auto it = _colspeReplacement.find(opt.substr(pos, spos - pos));
           if (it != _colspeReplacement.end()) {
             hasrep = true;

@@ -37,8 +37,14 @@ namespace {
 // etc.) used to shadow them and glyphs silently vanished. The bundled
 // families are prefixed now, but keep loud diagnostics for the log.
 void warnIfResolvedDifferently(const QFont& font, const QString& family) {
+  // \externalfont{...} feeds arbitrary family names through here, and this
+  // set is process-global and never shrinks, so cap it: past the cap the
+  // diagnostic is simply skipped instead of the set growing with the
+  // session. The bundled families are a handful of names.
+  static constexpr int kMaxCheckedFamilies = 256;
   static QSet<QString> checked;
   if (family.isEmpty() || checked.contains(family)) return;
+  if (checked.size() >= kMaxCheckedFamilies) return;
   checked.insert(family);
   const QFontInfo info(font);
   if (info.family().compare(family, Qt::CaseInsensitive) != 0) {

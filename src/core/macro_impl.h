@@ -95,6 +95,12 @@ inline macro(color) {
 }
 
 inline macro(newcolumntype) {
+  // Real column-type names are 1-2 characters. A long registered name makes
+  // parsePositions() probe every prefix of that length for every character
+  // of an array spec -- cubic in the spec length, which the step budget
+  // there cannot see because it counts loop turns, not probes.
+  if (args[1].length() > 16)
+    throw ex_parse("Column type name is too long!");
   MatrixAtom::defineColumnSpecifier(args[1], args[2]);
   return nullptr;
 }

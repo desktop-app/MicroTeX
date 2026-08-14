@@ -45,7 +45,10 @@ TeXRender::TeXRender(const sptr<Box>& box, float textSize, bool trueValues) {
   } else {
     _textSize = textSize;
   }
-  if (!trueValues) _insets += (int) (0.18f * textSize);
+  // rasterBound: textSize reaches here scaled by \magnification or
+  // \DeclareMathSizes from the formula, so the cast can see a value outside
+  // int range (same class the helper was added for).
+  if (!trueValues) _insets += rasterBound(0.18f * textSize);
   if (Box::DEBUG) {
     const auto group = wrap(box);
     _box = group;
@@ -142,7 +145,7 @@ Insets TeXRender::getInsets() {
 
 void TeXRender::setInsets(const Insets& insets, bool trueval) {
   _insets = insets;
-  if (!trueval) _insets += (int) (0.18f * _textSize);
+  if (!trueval) _insets += rasterBound(0.18f * _textSize);
 }
 
 void TeXRender::setWidth(int width, Alignment align) {

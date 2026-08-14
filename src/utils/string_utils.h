@@ -64,6 +64,12 @@ inline bool str2int(const std::string& str, int& res, int radix) {
 
   if ((val == LONG_MAX || val == LONG_MIN) && errno == ERANGE)
     return false;
+  // On platforms where long is wider than int, a value like \char's
+  // "4294967295" would silently truncate in the cast below. Reject it as
+  // unparseable instead, so callers see the same "not a number" they get
+  // for any other out-of-range input.
+  if (val < INT_MIN || val > INT_MAX)
+    return false;
 
   res = static_cast<int>(val);
   return endptr == str.c_str() + str.size();
