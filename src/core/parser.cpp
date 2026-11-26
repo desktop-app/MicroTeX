@@ -62,6 +62,12 @@ constexpr int64_t kMaxExpansionWork = 32 * 1024 * 1024;
 // (partial mode, per-argument sub-formulas), so a self-restarting budget would
 // not bound anything.
 thread_local int64_t gExpansionWork = 0;
+thread_local bool gLimitExceeded = false;
+
+[[noreturn]] void failLimit(const char* what) {
+  gLimitExceeded = true;
+  throw ex_parse(what);
+}
 
 // Charged before an expansion runs, not after: the cost being bounded is the
 // scanning and copying the expansion is about to do, and once the budget is
@@ -71,7 +77,7 @@ thread_local int64_t gExpansionWork = 0;
 void countExpansion(int length) {
   gExpansionWork += length;
   if (gExpansionWork > kMaxExpansionWork) {
-    throw ex_parse("Formula expands too much!");
+    failLimit("Formula expands too much!");
   }
 }
 
@@ -79,7 +85,7 @@ struct ParseDepthGuard {
   ParseDepthGuard() {
     if (++gParseDepth > kMaxParseDepth) {
       --gParseDepth;
-      throw ex_parse("Formula nesting is too deep!");
+      failLimit("Formula nesting is too deep!");
     }
   }
   ~ParseDepthGuard() { --gParseDepth; }
@@ -89,6 +95,18 @@ struct ParseDepthGuard {
 namespace tex {
 void resetExpansionWork() {
   gExpansionWork = 0;
+}
+
+void resetLimitExceeded() {
+  gLimitExceeded = false;
+}
+
+void markLimitExceeded() {
+  gLimitExceeded = true;
+}
+
+bool limitExceeded() {
+  return gLimitExceeded;
 }
 }  // namespace tex
 
@@ -632,7 +650,7 @@ sptr<Atom> TeXParser::processCommands(const wstring& cmd, MacroInfo* mac) {
     auto ret = mac->invoke(*this, args);
     insert(_spos, _pos, args.back());
     if (_len > kMaxExpandedLength) {
-      throw ex_parse("Formula expands too much!");
+      failLimit("Formula expands too much!");
     }
     return ret;
   }
@@ -869,7 +887,7 @@ void TeXParser::inflateNewCmd(wstring& cmd, Args& args, int& pos) {
   _len = _latex.length();
   _pos = pos;
   if (_len > kMaxExpandedLength) {
-    throw ex_parse("Formula expands too much!");
+    failLimit("Formula expands too much!");
   }
 }
 
@@ -903,7 +921,7 @@ void TeXParser::inflateEnv(wstring& cmd, Args& args, int& pos) {
   _len = _latex.length();
   _pos = pos;
   if (_len > kMaxExpandedLength) {
-    throw ex_parse("Formula expands too much!");
+    failLimit("Formula expands too much!");
   }
 }
 

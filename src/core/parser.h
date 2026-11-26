@@ -25,6 +25,10 @@ class MacroInfo;
 // one formula. Called once before each top-level parse.
 void resetExpansionWork();
 
+void resetLimitExceeded();
+void markLimitExceeded();
+bool limitExceeded();
+
 /** This class implements a parser for latex formulas */
 class TeXParser {
 private:

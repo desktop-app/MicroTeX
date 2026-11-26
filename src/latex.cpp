@@ -185,7 +185,7 @@ TeXRender* LaTeX::parse(const wstring& latex, int width, float textSize, float l
   DefaultTeXFont::resetMathSizes();
   resetBoxBudget();
   resetExpansionWork();
-  resetWrapDepthExceeded();
+  resetLimitExceeded();
 
   bool lined = true;
   if (startswith(latex, L"$$") || startswith(latex, L"\\[")) {
@@ -193,8 +193,8 @@ TeXRender* LaTeX::parse(const wstring& latex, int width, float textSize, float l
   }
   Alignment align = lined ? Alignment::left : Alignment::center;
   _formula->setLaTeX(latex);
-  if (wrapDepthExceeded()) {
-    throw ex_parse("Formula nesting is too deep!");
+  if (limitExceeded()) {
+    throw ex_parse("Formula goes over a limit!");
   }
   TeXRender* render =
     _builder->setStyle(TexStyle::display)

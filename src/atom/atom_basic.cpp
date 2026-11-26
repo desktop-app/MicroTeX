@@ -458,27 +458,13 @@ sptr<Box> UnderOverAtom::createBox(Environment& env) {
 
 SpaceAtom ScriptsAtom::SCRIPT_SPACE(UnitType::point, 0.5f, 0.f, 0.f);
 
-namespace {
-
-thread_local bool gWrapDepthExceeded = false;
-
-}  // namespace
-
-void tex::resetWrapDepthExceeded() {
-  gWrapDepthExceeded = false;
-}
-
-bool tex::wrapDepthExceeded() {
-  return gWrapDepthExceeded;
-}
-
 void Atom::inheritWrapDepth(const sptr<Atom>& base) {
   if (base == nullptr) return;
   _wrapDepth = base->_wrapDepth + 1;
   // A wrapper restarts the count, so destructors recurse this deep per level.
   constexpr int kMaxWrapDepth = 16;
   if (_wrapDepth > kMaxWrapDepth) {
-    gWrapDepthExceeded = true;
+    markLimitExceeded();
     throw ex_parse("Formula nesting is too deep!");
   }
 }
