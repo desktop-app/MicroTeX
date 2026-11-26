@@ -44,6 +44,8 @@ public:
 
   float getTextSize() const;
 
+  const sptr<Box>& getBox() const { return _box; }
+
   int getHeight() const;
 
   int getDepth() const;
