@@ -138,6 +138,16 @@ void Formula::setDEBUG(bool b) {
   Box::DEBUG = b;
 }
 
+// Parsed before any formula, so none can leave its own result in the cache.
+void Formula::_cachePredefined() {
+  for (const auto& entry : _predefinedTeXFormulasAsString) {
+    try {
+      get(entry.first);
+    } catch (exception&) {
+    }
+  }
+}
+
 sptr<Formula> Formula::get(const wstring& name) {
   auto it = _predefinedTeXFormulas.find(name);
   if (it == _predefinedTeXFormulas.end()) {
@@ -195,6 +205,7 @@ ArrayFormula::ArrayFormula() : _row(0), _col(0) {
 void ArrayFormula::addCol() {
   _array[_row].push_back(_root);
   _root = nullptr;
+  _overCount = 0;
   _col++;
 }
 
@@ -204,6 +215,7 @@ void ArrayFormula::addCol(int n) {
     _array[_row].push_back(nullptr);
   }
   _root = nullptr;
+  _overCount = 0;
   _col += n;
 }
 

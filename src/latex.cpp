@@ -121,6 +121,7 @@ void LaTeX::init(string res_root_path) {
   // environments are registered, so _reset() (run before each parse) can
   // roll back anything a formula defines without dropping the built-ins.
   NewCommandMacro::_captureBuiltins();
+  Formula::_cachePredefined();
 
   _formula = new Formula();
   _builder = new TeXRenderBuilder();
@@ -142,6 +143,7 @@ void LaTeX::initBundled() {
   // environments are registered, so _reset() (run before each parse) can
   // roll back anything a formula defines without dropping the built-ins.
   NewCommandMacro::_captureBuiltins();
+  Formula::_cachePredefined();
 
   _formula = new Formula();
   _builder = new TeXRenderBuilder();
@@ -182,7 +184,8 @@ TeXRender* LaTeX::parse(const wstring& latex, int width, float textSize, float l
   RowAtom::_breakEveywhere = false;
   DefaultTeXFont::resetMathSizes();
   resetBoxBudget();
-  resetExpansionWork();
+  resetExpansionWork(latex.size());
+  resetLimitExceeded();
 
   bool lined = true;
   if (startswith(latex, L"$$") || startswith(latex, L"\\[")) {
@@ -190,6 +193,9 @@ TeXRender* LaTeX::parse(const wstring& latex, int width, float textSize, float l
   }
   Alignment align = lined ? Alignment::left : Alignment::center;
   _formula->setLaTeX(latex);
+  if (limitExceeded()) {
+    throw ex_parse("Formula goes over a limit!");
+  }
   TeXRender* render =
     _builder->setStyle(TexStyle::display)
       .setTextSize(textSize)

@@ -96,6 +96,7 @@ void MatrixAtom::parsePositions(wstring opt, vector<Alignment>& lpos) {
         auto atom = tp->getArgument();
         // Keep columns same with the matrix
         if (lpos.size() > _matrix->cols()) lpos.resize(_matrix->cols());
+        countParseWork(int64_t(_matrix->rows()) * (_matrix->cols() + 1));
         _matrix->insertAtomIntoCol(lpos.size(), atom);
 
         lpos.push_back(Alignment::none);

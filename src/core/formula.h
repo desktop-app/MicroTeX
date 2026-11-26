@@ -69,6 +69,7 @@ public:
   std::list<sptr<MiddleAtom>> _middle;
   // the root atom of the "atom tree" that represents the formula
   sptr<Atom> _root;
+  int _overCount = 0;
   // the current text style
   std::string _textStyle;
 
@@ -151,6 +152,8 @@ public:
   static void setDEBUG(bool b);
 
   static void _init_();
+
+  static void _cachePredefined();
 
   static void _free_();
 

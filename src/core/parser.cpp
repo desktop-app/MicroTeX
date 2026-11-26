@@ -62,6 +62,14 @@ constexpr int64_t kMaxExpansionWork = 32 * 1024 * 1024;
 // (partial mode, per-argument sub-formulas), so a self-restarting budget would
 // not bound anything.
 thread_local int64_t gExpansionWork = 0;
+thread_local int64_t gExpandedTotal = 0;
+thread_local int64_t gExpandedCap = 0;
+thread_local bool gLimitExceeded = false;
+
+[[noreturn]] void failLimit(const char* what) {
+  gLimitExceeded = true;
+  throw ex_parse(what);
+}
 
 // Charged before an expansion runs, not after: the cost being bounded is the
 // scanning and copying the expansion is about to do, and once the budget is
@@ -71,7 +79,19 @@ thread_local int64_t gExpansionWork = 0;
 void countExpansion(int length) {
   gExpansionWork += length;
   if (gExpansionWork > kMaxExpansionWork) {
-    throw ex_parse("Formula expands too much!");
+    failLimit("Formula expands too much!");
+  }
+}
+
+bool isCommandLetter(wchar_t ch) {
+  return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '@';
+}
+
+// Each parser caps its own text, so many small ones must share a cap too.
+void countExpanded(size_t length) {
+  gExpandedTotal += int64_t(length);
+  if (gExpandedTotal > gExpandedCap) {
+    failLimit("Formula expands too much!");
   }
 }
 
@@ -79,7 +99,7 @@ struct ParseDepthGuard {
   ParseDepthGuard() {
     if (++gParseDepth > kMaxParseDepth) {
       --gParseDepth;
-      throw ex_parse("Formula nesting is too deep!");
+      failLimit("Formula nesting is too deep!");
     }
   }
   ~ParseDepthGuard() { --gParseDepth; }
@@ -87,8 +107,32 @@ struct ParseDepthGuard {
 }  // namespace
 
 namespace tex {
-void resetExpansionWork() {
+void resetExpansionWork(size_t sourceLength) {
+  // Dense real formulas expand to under 12 times their own length.
+  constexpr int64_t kMaxExpandedPerSourceChar = 16;
   gExpansionWork = 0;
+  gExpandedTotal = 0;
+  gExpandedCap = kMaxExpandedLength
+    + kMaxExpandedPerSourceChar * int64_t(sourceLength);
+}
+
+void countParseWork(int64_t amount) {
+  gExpansionWork += amount;
+  if (gExpansionWork > kMaxExpansionWork) {
+    failLimit("Formula expands too much!");
+  }
+}
+
+void resetLimitExceeded() {
+  gLimitExceeded = false;
+}
+
+void markLimitExceeded() {
+  gLimitExceeded = true;
+}
+
+bool limitExceeded() {
+  return gLimitExceeded;
 }
 }  // namespace tex
 
@@ -188,6 +232,7 @@ void TeXParser::reset(const wstring& latex) {
   _latex = latex;
   _len = latex.length();
   _formula->_root = nullptr;
+  _formula->_overCount = 0;
   // Only \left...\right consumes this list, from its own local formula, so
   // a \middle written outside one is parked here and never taken. The shared
   // LaTeX::_formula is reused for every parse, so without clearing it those
@@ -216,6 +261,11 @@ sptr<Atom> TeXParser::popLastAtom() const {
 }
 
 sptr<Atom> TeXParser::popFormulaAtom() const {
+  // TeX allows one per group: each further one nests all that came before.
+  constexpr int kMaxOversPerGroup = 4;
+  if (++_formula->_overCount > kMaxOversPerGroup) {
+    failLimit("Formula nesting is too deep!");
+  }
   auto a = _formula->_root;
   _formula->_root = nullptr;
   return a;
@@ -376,6 +426,7 @@ wstring TeXParser::getOverArgument() {
           _pos < _len - 1
           && _latex[_pos] == 'c'
           && _latex[_pos + 1] == 'r'
+          && (_pos + 2 >= _len || !isCommandLetter(_latex[_pos + 2]))
           && ogroup == 1) {
           ogroup--;
           _pos--;
@@ -630,9 +681,10 @@ sptr<Atom> TeXParser::processCommands(const wstring& cmd, MacroInfo* mac) {
     countExpansion(_len);
     // The last value in "args" is the replacement string
     auto ret = mac->invoke(*this, args);
+    countExpanded(args.back().size());
     insert(_spos, _pos, args.back());
     if (_len > kMaxExpandedLength) {
-      throw ex_parse("Formula expands too much!");
+      failLimit("Formula expands too much!");
     }
     return ret;
   }
@@ -765,6 +817,7 @@ sptr<Atom> TeXParser::getArgument() {
     }
 
     if (ch == ESCAPE) {
+      ParseDepthGuard depthGuard;
       auto atom = processEscape();
       if (_insertion) {
         _insertion = false;
@@ -861,6 +914,7 @@ void TeXParser::inflateNewCmd(wstring& cmd, Args& args, int& pos) {
   try {
     mac->invoke(*this, args);
     // The last element is the returned value (after inflated macro)
+    countExpanded(args.back().size());
     _latex.replace(pos, _pos - pos, args.back());
   } catch (ex_parse& e) {
     if (!_isPartial) throw;
@@ -869,7 +923,7 @@ void TeXParser::inflateNewCmd(wstring& cmd, Args& args, int& pos) {
   _len = _latex.length();
   _pos = pos;
   if (_len > kMaxExpandedLength) {
-    throw ex_parse("Formula expands too much!");
+    failLimit("Formula expands too much!");
   }
 }
 
@@ -903,7 +957,7 @@ void TeXParser::inflateEnv(wstring& cmd, Args& args, int& pos) {
   _len = _latex.length();
   _pos = pos;
   if (_len > kMaxExpandedLength) {
-    throw ex_parse("Formula expands too much!");
+    failLimit("Formula expands too much!");
   }
 }
 

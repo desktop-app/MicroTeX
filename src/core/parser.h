@@ -23,7 +23,12 @@ class MacroInfo;
 
 // Reset the per-formula expansion budget shared by every parser working on
 // one formula. Called once before each top-level parse.
-void resetExpansionWork();
+void resetExpansionWork(size_t sourceLength);
+void countParseWork(int64_t amount);
+
+void resetLimitExceeded();
+void markLimitExceeded();
+bool limitExceeded();
 
 /** This class implements a parser for latex formulas */
 class TeXParser {
