@@ -794,6 +794,7 @@ sptr<Atom> TeXParser::getArgument() {
     }
 
     if (ch == ESCAPE) {
+      ParseDepthGuard depthGuard;
       auto atom = processEscape();
       if (_insertion) {
         _insertion = false;
