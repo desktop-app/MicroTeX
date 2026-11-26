@@ -9,6 +9,9 @@
 
 namespace tex {
 
+void resetWrapDepthExceeded();
+bool wrapDepthExceeded();
+
 /**
  * An abstract superclass for all logical mathematical constructions that can be
  * a part of a Formula. All subclasses must implement the abstract

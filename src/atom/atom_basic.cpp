@@ -458,18 +458,51 @@ sptr<Box> UnderOverAtom::createBox(Environment& env) {
 
 SpaceAtom ScriptsAtom::SCRIPT_SPACE(UnitType::point, 0.5f, 0.f, 0.f);
 
+namespace {
+
+thread_local bool gWrapDepthExceeded = false;
+
+}  // namespace
+
+void tex::resetWrapDepthExceeded() {
+  gWrapDepthExceeded = false;
+}
+
+bool tex::wrapDepthExceeded() {
+  return gWrapDepthExceeded;
+}
+
 void Atom::inheritWrapDepth(const sptr<Atom>& base) {
   if (base == nullptr) return;
   _wrapDepth = base->_wrapDepth + 1;
-  // Matches the parser's own nesting limit: the two bound the same thing --
-  // how deep createBox() will recurse -- just reached by different routes.
-  constexpr int kMaxWrapDepth = 250;
+  // A wrapper restarts the count, so destructors recurse this deep per level.
+  constexpr int kMaxWrapDepth = 16;
   if (_wrapDepth > kMaxWrapDepth) {
+    gWrapDepthExceeded = true;
     throw ex_parse("Formula nesting is too deep!");
   }
 }
 
+namespace {
+
+// Chains nested in wrappers add up, so layout counts its own stack depth.
+constexpr int kMaxScriptsLayoutDepth = 96;
+thread_local int gScriptsLayoutDepth = 0;
+
+struct ScriptsLayoutGuard {
+  ScriptsLayoutGuard() {
+    if (++gScriptsLayoutDepth > kMaxScriptsLayoutDepth) {
+      --gScriptsLayoutDepth;
+      throw ex_parse("Formula nesting is too deep!");
+    }
+  }
+  ~ScriptsLayoutGuard() { --gScriptsLayoutDepth; }
+};
+
+}  // namespace
+
 sptr<Box> ScriptsAtom::createBox(Environment& env) {
+  const ScriptsLayoutGuard guard;
   if (_base == nullptr) {
     auto in = sptrOf<CharAtom>(L'M', "mathnormal");
     _base = sptrOf<PhantomAtom>(in, false, true, true);
@@ -715,6 +748,7 @@ sptr<Box> BigOperatorAtom::createSideSets(Environment& env) {
 }
 
 sptr<Box> BigOperatorAtom::createBox(Environment& env) {
+  const ScriptsLayoutGuard guard;
   if (dynamic_cast<SideSetsAtom*>(_base.get())) return createSideSets(env);
 
   TeXFont* tf = env.getTeXFont().get();
