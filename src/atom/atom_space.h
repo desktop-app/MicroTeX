@@ -12,6 +12,7 @@ namespace tex {
  * unit types.
  */
 class SpaceAtom : public Atom {
+  friend struct OracleAccess;
 private:
   static const std::pair<const char*, UnitType> _units[];
   static const i32 _unitsCount;

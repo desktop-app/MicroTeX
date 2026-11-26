@@ -35,6 +35,7 @@ public:
 };
 
 class NewCommandMacro : public Macro {
+  friend struct OracleAccess;
 protected:
   static std::map<std::wstring, std::wstring> _codes;
   static std::map<std::wstring, std::wstring> _replacements;
@@ -124,6 +125,7 @@ public:
 };
 
 class MacroInfo {
+  friend struct OracleAccess;
 public:
   static std::map<std::wstring, MacroInfo*> _commands;
 
@@ -161,6 +163,7 @@ public:
 };
 
 class InflationMacroInfo : public MacroInfo {
+  friend struct OracleAccess;
 private:
   // The actual macro to execute
   Macro* const _macro;
@@ -187,6 +190,7 @@ typedef sptr<Atom> (* MacroDelegate)(
 );
 
 class PreDefMacro : public MacroInfo {
+  friend struct OracleAccess;
 private:
   MacroDelegate _delegate;
 

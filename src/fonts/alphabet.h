@@ -7,6 +7,7 @@
 namespace tex {
 
 class UnicodeBlock {
+  friend struct OracleAccess;
 private:
   static std::vector<const UnicodeBlock*> _defined;
 

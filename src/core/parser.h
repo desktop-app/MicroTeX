@@ -27,6 +27,7 @@ void resetExpansionWork();
 
 /** This class implements a parser for latex formulas */
 class TeXParser {
+  friend struct OracleAccess;
 private:
   std::wstring _latex;
   int _pos, _spos, _len;

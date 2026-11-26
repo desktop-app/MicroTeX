@@ -9,6 +9,7 @@ namespace tex {
  */
 template <typename T, size_t N, size_t M>
 class IndexedArray {
+  friend struct OracleAccess;
 private:
   const T* _raw;
   size_t   _rows;

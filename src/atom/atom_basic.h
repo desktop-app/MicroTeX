@@ -271,6 +271,7 @@ public:
 
 /** An atom representing the foreground and background color of an other atom */
 class ColorAtom : public Atom, public Row {
+  friend struct OracleAccess;
 private:
   static std::map<std::string, color> _colors;
   static const color _default;

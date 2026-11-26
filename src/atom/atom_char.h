@@ -82,6 +82,7 @@ public:
 };
 
 class SymbolAtom : public CharSymbol {
+  friend struct OracleAccess;
 private:
 
   // symbol name

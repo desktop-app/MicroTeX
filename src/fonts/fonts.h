@@ -28,6 +28,7 @@ class SymbolsSet;
  * The default implementation of the TeXFont-interface.
  */
 class DefaultTeXFont : public TeXFont {
+  friend struct OracleAccess;
 private:
   // font related
   static std::string* _defaultTextStyleMappings;

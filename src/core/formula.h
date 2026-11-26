@@ -47,6 +47,7 @@ struct FontInfos {
  * independent of this Formula object!
  */
 class Formula {
+  friend struct OracleAccess;
 private:
   TeXParser _parser;
 

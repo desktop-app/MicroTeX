@@ -12,6 +12,7 @@ class Box;
 
 /** Represents glue by its 3 components. Contains the "glue rules" */
 class Glue {
+  friend struct OracleAccess;
 private:
   constexpr static int TYPE_COUNT = 8;
   constexpr static int STYLE_COUNT = 5;

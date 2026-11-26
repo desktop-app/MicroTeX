@@ -11,6 +11,7 @@ namespace tex {
 class FontSet;
 
 class FontInfo {
+  friend struct OracleAccess;
 private:
   static std::vector<FontInfo*> _infos;
   static std::vector<std::string> _names;
