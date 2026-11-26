@@ -184,7 +184,7 @@ TeXRender* LaTeX::parse(const wstring& latex, int width, float textSize, float l
   RowAtom::_breakEveywhere = false;
   DefaultTeXFont::resetMathSizes();
   resetBoxBudget();
-  resetExpansionWork();
+  resetExpansionWork(latex.size());
   resetLimitExceeded();
 
   bool lined = true;

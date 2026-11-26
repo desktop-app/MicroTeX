@@ -63,6 +63,7 @@ constexpr int64_t kMaxExpansionWork = 32 * 1024 * 1024;
 // not bound anything.
 thread_local int64_t gExpansionWork = 0;
 thread_local int64_t gExpandedTotal = 0;
+thread_local int64_t gExpandedCap = 0;
 thread_local bool gLimitExceeded = false;
 
 [[noreturn]] void failLimit(const char* what) {
@@ -88,9 +89,8 @@ bool isCommandLetter(wchar_t ch) {
 
 // Each parser caps its own text, so many small ones must share a cap too.
 void countExpanded(size_t length) {
-  constexpr int64_t kMaxExpandedTotal = 2 * kMaxExpandedLength;
   gExpandedTotal += int64_t(length);
-  if (gExpandedTotal > kMaxExpandedTotal) {
+  if (gExpandedTotal > gExpandedCap) {
     failLimit("Formula expands too much!");
   }
 }
@@ -107,9 +107,13 @@ struct ParseDepthGuard {
 }  // namespace
 
 namespace tex {
-void resetExpansionWork() {
+void resetExpansionWork(size_t sourceLength) {
+  // Dense real formulas expand to under 12 times their own length.
+  constexpr int64_t kMaxExpandedPerSourceChar = 16;
   gExpansionWork = 0;
   gExpandedTotal = 0;
+  gExpandedCap = kMaxExpandedLength
+    + kMaxExpandedPerSourceChar * int64_t(sourceLength);
 }
 
 void countParseWork(int64_t amount) {
@@ -949,7 +953,6 @@ void TeXParser::inflateEnv(wstring& cmd, Args& args, int& pos) {
   wstring expr = L"{\\makeatletter \\" + args[1] + L"@env";
   for (int i = 1; i <= mac->_argc - 1; i++) expr += L"{" + optargs[i] + L"}";
   expr += L"{" + grp + L"}\\makeatother}";
-  countExpanded(expr.size());
   _latex.replace(pos, _pos - pos, expr);
   _len = _latex.length();
   _pos = pos;
