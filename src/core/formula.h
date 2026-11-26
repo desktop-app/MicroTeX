@@ -151,6 +151,8 @@ public:
 
   static void _init_();
 
+  static void _cachePredefined();
+
   static void _free_();
 
   virtual ~Formula() = default;

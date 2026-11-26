@@ -138,6 +138,16 @@ void Formula::setDEBUG(bool b) {
   Box::DEBUG = b;
 }
 
+// Parsed before any formula, so none can leave its own result in the cache.
+void Formula::_cachePredefined() {
+  for (const auto& entry : _predefinedTeXFormulasAsString) {
+    try {
+      get(entry.first);
+    } catch (exception&) {
+    }
+  }
+}
+
 sptr<Formula> Formula::get(const wstring& name) {
   auto it = _predefinedTeXFormulas.find(name);
   if (it == _predefinedTeXFormulas.end()) {

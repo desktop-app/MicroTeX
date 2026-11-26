@@ -121,6 +121,7 @@ void LaTeX::init(string res_root_path) {
   // environments are registered, so _reset() (run before each parse) can
   // roll back anything a formula defines without dropping the built-ins.
   NewCommandMacro::_captureBuiltins();
+  Formula::_cachePredefined();
 
   _formula = new Formula();
   _builder = new TeXRenderBuilder();
@@ -142,6 +143,7 @@ void LaTeX::initBundled() {
   // environments are registered, so _reset() (run before each parse) can
   // roll back anything a formula defines without dropping the built-ins.
   NewCommandMacro::_captureBuiltins();
+  Formula::_cachePredefined();
 
   _formula = new Formula();
   _builder = new TeXRenderBuilder();
