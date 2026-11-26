@@ -81,6 +81,10 @@ void countExpansion(int length) {
   }
 }
 
+bool isCommandLetter(wchar_t ch) {
+  return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '@';
+}
+
 struct ParseDepthGuard {
   ParseDepthGuard() {
     if (++gParseDepth > kMaxParseDepth) {
@@ -206,6 +210,7 @@ void TeXParser::reset(const wstring& latex) {
   _latex = latex;
   _len = latex.length();
   _formula->_root = nullptr;
+  _formula->_overCount = 0;
   // Only \left...\right consumes this list, from its own local formula, so
   // a \middle written outside one is parked here and never taken. The shared
   // LaTeX::_formula is reused for every parse, so without clearing it those
@@ -234,6 +239,11 @@ sptr<Atom> TeXParser::popLastAtom() const {
 }
 
 sptr<Atom> TeXParser::popFormulaAtom() const {
+  // TeX allows one per group: each further one nests all that came before.
+  constexpr int kMaxOversPerGroup = 4;
+  if (++_formula->_overCount > kMaxOversPerGroup) {
+    failLimit("Formula nesting is too deep!");
+  }
   auto a = _formula->_root;
   _formula->_root = nullptr;
   return a;
@@ -394,6 +404,7 @@ wstring TeXParser::getOverArgument() {
           _pos < _len - 1
           && _latex[_pos] == 'c'
           && _latex[_pos + 1] == 'r'
+          && (_pos + 2 >= _len || !isCommandLetter(_latex[_pos + 2]))
           && ogroup == 1) {
           ogroup--;
           _pos--;

@@ -205,6 +205,7 @@ ArrayFormula::ArrayFormula() : _row(0), _col(0) {
 void ArrayFormula::addCol() {
   _array[_row].push_back(_root);
   _root = nullptr;
+  _overCount = 0;
   _col++;
 }
 
@@ -214,6 +215,7 @@ void ArrayFormula::addCol(int n) {
     _array[_row].push_back(nullptr);
   }
   _root = nullptr;
+  _overCount = 0;
   _col += n;
 }
 
