@@ -62,6 +62,7 @@ constexpr int64_t kMaxExpansionWork = 32 * 1024 * 1024;
 // (partial mode, per-argument sub-formulas), so a self-restarting budget would
 // not bound anything.
 thread_local int64_t gExpansionWork = 0;
+thread_local int64_t gExpandedTotal = 0;
 thread_local bool gLimitExceeded = false;
 
 [[noreturn]] void failLimit(const char* what) {
@@ -85,6 +86,15 @@ bool isCommandLetter(wchar_t ch) {
   return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '@';
 }
 
+// Each parser caps its own text, so many small ones must share a cap too.
+void countExpanded(size_t length) {
+  constexpr int64_t kMaxExpandedTotal = 2 * kMaxExpandedLength;
+  gExpandedTotal += int64_t(length);
+  if (gExpandedTotal > kMaxExpandedTotal) {
+    failLimit("Formula expands too much!");
+  }
+}
+
 struct ParseDepthGuard {
   ParseDepthGuard() {
     if (++gParseDepth > kMaxParseDepth) {
@@ -99,6 +109,14 @@ struct ParseDepthGuard {
 namespace tex {
 void resetExpansionWork() {
   gExpansionWork = 0;
+  gExpandedTotal = 0;
+}
+
+void countParseWork(int64_t amount) {
+  gExpansionWork += amount;
+  if (gExpansionWork > kMaxExpansionWork) {
+    failLimit("Formula expands too much!");
+  }
 }
 
 void resetLimitExceeded() {
@@ -659,6 +677,7 @@ sptr<Atom> TeXParser::processCommands(const wstring& cmd, MacroInfo* mac) {
     countExpansion(_len);
     // The last value in "args" is the replacement string
     auto ret = mac->invoke(*this, args);
+    countExpanded(args.back().size());
     insert(_spos, _pos, args.back());
     if (_len > kMaxExpandedLength) {
       failLimit("Formula expands too much!");
@@ -891,6 +910,7 @@ void TeXParser::inflateNewCmd(wstring& cmd, Args& args, int& pos) {
   try {
     mac->invoke(*this, args);
     // The last element is the returned value (after inflated macro)
+    countExpanded(args.back().size());
     _latex.replace(pos, _pos - pos, args.back());
   } catch (ex_parse& e) {
     if (!_isPartial) throw;
@@ -929,6 +949,7 @@ void TeXParser::inflateEnv(wstring& cmd, Args& args, int& pos) {
   wstring expr = L"{\\makeatletter \\" + args[1] + L"@env";
   for (int i = 1; i <= mac->_argc - 1; i++) expr += L"{" + optargs[i] + L"}";
   expr += L"{" + grp + L"}\\makeatother}";
+  countExpanded(expr.size());
   _latex.replace(pos, _pos - pos, expr);
   _len = _latex.length();
   _pos = pos;
